@@ -32,7 +32,7 @@ RUN npm install --omit=dev
 COPY --from=builder /app/dist ./dist
 
 # Puerto por defecto de NestJS
-EXPOSE 3000
+EXPOSE 8081
 
 # Comando de inicio
 CMD ["node", "dist/main.js"]
