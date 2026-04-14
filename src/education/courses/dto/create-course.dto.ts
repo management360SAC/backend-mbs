@@ -1,3 +1,4 @@
+import { Transform } from "class-transformer";
 import { IsBoolean, IsInt, IsOptional, IsString, MaxLength } from "class-validator";
 
 export class CreateCourseDto {
@@ -14,6 +15,7 @@ export class CreateCourseDto {
   description?: string;
 
   @IsOptional()
+  @Transform(({ value }) => (value !== undefined && value !== null ? String(value) : value))
   @IsString()
   price?: string;
 

@@ -23,7 +23,7 @@ VALUES
   ('Contactado',        2, 1, 0, 0, 0, NOW(), NOW()),
   ('Calificado',        3, 1, 0, 0, 0, NOW(), NOW()),
   ('Propuesta enviada', 4, 1, 0, 0, 0, NOW(), NOW()),
-  ('Negociación',       5, 1, 0, 0, 0, NOW(), NOW()),
+  ('Negociacion',       5, 1, 0, 0, 0, NOW(), NOW()),
   ('Ganado',            6, 1, 1, 1, 0, NOW(), NOW()),
   ('Perdido',           7, 1, 1, 0, 1, NOW(), NOW());
 
@@ -41,8 +41,8 @@ SELECT 'Propuesta Enviada', 3, 0, 0, NOW()
 WHERE NOT EXISTS (SELECT 1 FROM mk_funnel_stages WHERE name = 'Propuesta Enviada');
 
 INSERT INTO mk_funnel_stages (name, position, is_won, is_lost, created_at)
-SELECT 'Negociación', 4, 0, 0, NOW()
-WHERE NOT EXISTS (SELECT 1 FROM mk_funnel_stages WHERE name = 'Negociación');
+SELECT 'Negociacion', 4, 0, 0, NOW()
+WHERE NOT EXISTS (SELECT 1 FROM mk_funnel_stages WHERE name = 'Negociacion');
 
 INSERT INTO mk_funnel_stages (name, position, is_won, is_lost, created_at)
 SELECT 'Cerrado Ganado', 5, 1, 0, NOW()
@@ -544,7 +544,7 @@ WHERE NOT EXISTS (SELECT 1 FROM mk_contacts WHERE email='asoto.vargas@gmail.com'
 
 SET @stage_calificacion = (SELECT id FROM mk_funnel_stages WHERE name = 'Calificación' LIMIT 1);
 SET @stage_propuesta     = (SELECT id FROM mk_funnel_stages WHERE name = 'Propuesta Enviada' LIMIT 1);
-SET @stage_negociacion   = (SELECT id FROM mk_funnel_stages WHERE name = 'Negociación' LIMIT 1);
+SET @stage_negociacion   = (SELECT id FROM mk_funnel_stages WHERE name = 'Negociacion' LIMIT 1);
 SET @stage_ganado        = (SELECT id FROM mk_funnel_stages WHERE name = 'Cerrado Ganado' LIMIT 1);
 SET @stage_perdido       = (SELECT id FROM mk_funnel_stages WHERE name = 'Cerrado Perdido' LIMIT 1);
 

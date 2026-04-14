@@ -1,44 +1,117 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PdfService = void 0;
 const common_1 = require("@nestjs/common");
-const NAVY = "#0f2267";
-const NAVY_LIGHT = "#1a3380";
-const ACCENT = "#c8a84b";
-const DARK = "#1e293b";
-const MUTED = "#64748b";
-const SUBTLE_BG = "#f5f7fc";
-const BORDER = "#dde3f0";
-const WHITE = "#ffffff";
+const pdf_lib_1 = require("pdf-lib");
+const fontkit_1 = __importDefault(require("@pdf-lib/fontkit"));
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
+const NAVY = (0, pdf_lib_1.rgb)(2 / 255, 38 / 255, 89 / 255);
+const WHITE = (0, pdf_lib_1.rgb)(1, 1, 1);
+const TEXT_DARK = (0, pdf_lib_1.rgb)(31 / 255, 43 / 255, 68 / 255);
+const TEXT_MUTED = (0, pdf_lib_1.rgb)(101 / 255, 116 / 255, 139 / 255);
+const ROW_BG = (0, pdf_lib_1.rgb)(217 / 255, 221 / 255, 232 / 255);
 let PdfService = class PdfService {
     async generateCotizacionPdf(cotizacion, detalles, empresa, contact) {
-        const PdfPrinter = require("pdfmake");
-        const fonts = {
-            Helvetica: {
-                normal: "Helvetica",
-                bold: "Helvetica-Bold",
-                italics: "Helvetica-Oblique",
-                bolditalics: "Helvetica-BoldOblique",
-            },
+        const templatePath = path.join(__dirname, "proforma-template.pdf");
+        const templateBytes = fs.readFileSync(templatePath);
+        const pdfDoc = await pdf_lib_1.PDFDocument.load(templateBytes);
+        pdfDoc.registerFontkit(fontkit_1.default);
+        const page = pdfDoc.getPages()[0];
+        const { height } = page.getSize();
+        const arialBytes = fs.readFileSync(path.join(__dirname, "arial.ttf"));
+        const arialBoldBytes = fs.readFileSync(path.join(__dirname, "arial-bold.ttf"));
+        const helv = await pdfDoc.embedFont(arialBytes);
+        const helvBold = await pdfDoc.embedFont(arialBoldBytes);
+        const T = (text, x, yTop, size, bold = false, color = TEXT_DARK) => {
+            page.drawText(text, {
+                x,
+                y: height - yTop - size,
+                size,
+                font: bold ? helvBold : helv,
+                color,
+            });
         };
-        const printer = new PdfPrinter(fonts);
-        const fmtMoney = (v) => Number(v).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const TR = (text, xRight, yTop, size, bold = false, color = TEXT_DARK) => {
+            const f = bold ? helvBold : helv;
+            const w = f.widthOfTextAtSize(text, size);
+            T(text, xRight - w, yTop, size, bold, color);
+        };
+        const wrap = (text, maxW, size, bold = false) => {
+            const f = bold ? helvBold : helv;
+            const lines = [];
+            let line = "";
+            for (const word of text.split(" ")) {
+                const test = line ? `${line} ${word}` : word;
+                if (f.widthOfTextAtSize(test, size) <= maxW) {
+                    line = test;
+                }
+                else {
+                    if (line)
+                        lines.push(line);
+                    line = word;
+                }
+            }
+            if (line)
+                lines.push(line);
+            return lines;
+        };
+        const fmtMoney = (v) => Number(v).toLocaleString("es-PE", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
         const fmtDate = (d) => {
             if (!d)
                 return "—";
             return new Date(d).toLocaleDateString("es-PE", {
-                year: "numeric",
-                month: "long",
                 day: "numeric",
+                month: "long",
+                year: "numeric",
             });
         };
-        const estadoLabels = {
+        const estadoLabel = {
             BORRADOR: "Borrador",
             GENERADA: "Generada",
             ENVIADA: "Enviada",
@@ -46,300 +119,56 @@ let PdfService = class PdfService {
             RECHAZADA: "Rechazada",
             VENCIDA: "Vencida",
         };
-        const sortedDetalles = [...detalles].sort((a, b) => a.orden - b.orden);
-        const tableRows = [
-            [
-                { text: "#", style: "thCell", alignment: "center" },
-                { text: "Descripción", style: "thCell" },
-                { text: "Cant.", style: "thCell", alignment: "right" },
-                { text: "P. Unitario", style: "thCell", alignment: "right" },
-                { text: "Desc. %", style: "thCell", alignment: "right" },
-                { text: "Subtotal", style: "thCell", alignment: "right" },
-            ],
-        ];
-        sortedDetalles.forEach((d, i) => {
-            const isEven = i % 2 === 0;
-            const cellStyle = isEven ? "tdCellAlt" : "tdCell";
-            tableRows.push([
-                { text: String(i + 1), style: cellStyle, alignment: "center", color: MUTED },
-                { text: d.descripcion, style: cellStyle, color: DARK },
-                { text: Number(d.cantidad).toFixed(2), style: cellStyle, alignment: "right", color: DARK },
-                { text: `${cotizacion.moneda} ${fmtMoney(Number(d.precio_unitario))}`, style: cellStyle, alignment: "right", color: DARK },
-                { text: `${Number(d.descuento_pct).toFixed(1)}%`, style: cellStyle, alignment: "right", color: MUTED },
-                { text: `${cotizacion.moneda} ${fmtMoney(Number(d.subtotal))}`, style: cellStyle, alignment: "right", bold: true, color: DARK },
-            ]);
+        TR(cotizacion.numero, 565, 102, 11, true, NAVY);
+        T(estadoLabel[cotizacion.estado] ?? cotizacion.estado, 295, 144, 9, true, WHITE);
+        T(fmtDate(cotizacion.created_at), 455, 144, 9, false, WHITE);
+        const clientName = contact?.full_name || "";
+        const clientCompany = contact?.company || "";
+        const clientEmail = contact?.email || "";
+        const clientPhone = contact?.phone ? `Tel: ${contact.phone}` : "";
+        if (clientName)
+            T(clientName, 65, 222, 18, true, TEXT_DARK);
+        if (clientCompany)
+            T(clientCompany, 65, 248, 11, false, TEXT_MUTED);
+        if (clientEmail)
+            T(clientEmail, 65, 264, 11, false, TEXT_MUTED);
+        if (clientPhone)
+            T(clientPhone, 65, 280, 11, false, TEXT_MUTED);
+        const sorted = [...detalles].sort((a, b) => a.orden - b.orden);
+        const ROW_H = 22;
+        let tableYTop = 352;
+        for (let i = 0; i < sorted.length; i++) {
+            const item = sorted[i];
+            page.drawRectangle({
+                x: 28,
+                y: height - tableYTop - ROW_H,
+                width: 542,
+                height: ROW_H,
+                color: ROW_BG,
+            });
+            const ty = tableYTop + 7;
+            T(String(i + 1), 44, ty, 9);
+            T(item.descripcion.substring(0, 68), 70, ty, 9);
+            TR(Number(item.cantidad).toFixed(2), 358, ty, 9);
+            TR(`${cotizacion.moneda} ${fmtMoney(Number(item.precio_unitario))}`, 452, ty, 9);
+            TR(`${Number(item.descuento_pct).toFixed(1)}%`, 506, ty, 9);
+            TR(`${cotizacion.moneda} ${fmtMoney(Number(item.subtotal))}`, 566, ty, 9, true);
+            tableYTop += ROW_H;
+        }
+        const cur = cotizacion.moneda;
+        TR(`${cur} ${fmtMoney(Number(cotizacion.subtotal))}`, 566, 508, 11);
+        TR(`${cur} ${fmtMoney(Number(cotizacion.impuesto_monto))}`, 566, 526, 11);
+        TR(`${cur} ${fmtMoney(Number(cotizacion.total))}`, 566, 556, 16, true, NAVY);
+        page.drawRectangle({ x: 28, y: height - 690, width: 540, height: 80, color: WHITE });
+        const terminos = cotizacion.terminos ||
+            empresa.terminos ||
+            "La presente cotización tiene una validez de 30 días desde su fecha de emisión. " +
+                "Los precios incluyen IGV (18%). Forma de pago: 50% al inicio y 50% a la entrega.";
+        const terminosLines = wrap(terminos, 530, 9);
+        terminosLines.slice(0, 4).forEach((line, i) => {
+            T(line, 35, 628 + i * 12, 9, false, TEXT_MUTED);
         });
-        const logoStack = [];
-        if (empresa.logo_base64) {
-            try {
-                logoStack.push({ image: empresa.logo_base64, width: 64, margin: [0, 0, 0, 0] });
-            }
-            catch { }
-        }
-        const empresaInfoLines = [
-            { text: empresa.nombre, fontSize: 13, bold: true, color: WHITE, margin: [0, 0, 0, 2] },
-        ];
-        if (empresa.ruc)
-            empresaInfoLines.push({ text: `RUC: ${empresa.ruc}`, fontSize: 7.5, color: "#b8c8ef", margin: [0, 1, 0, 0] });
-        if (empresa.direccion)
-            empresaInfoLines.push({ text: empresa.direccion, fontSize: 7.5, color: "#b8c8ef", margin: [0, 1, 0, 0] });
-        if (empresa.telefono)
-            empresaInfoLines.push({ text: `Tel: ${empresa.telefono}`, fontSize: 7.5, color: "#b8c8ef", margin: [0, 1, 0, 0] });
-        if (empresa.email)
-            empresaInfoLines.push({ text: empresa.email, fontSize: 7.5, color: "#b8c8ef", margin: [0, 1, 0, 0] });
-        const cotNumStack = [
-            { text: "COTIZACIÓN", fontSize: 8, bold: true, color: ACCENT, characterSpacing: 1.5, margin: [0, 0, 0, 4] },
-            { text: cotizacion.numero, fontSize: 18, bold: true, color: WHITE, margin: [0, 0, 0, 6] },
-            {
-                canvas: [{ type: "line", x1: 0, y1: 0, x2: 110, y2: 0, lineWidth: 0.5, lineColor: ACCENT }],
-                margin: [0, 0, 0, 6],
-            },
-            { text: `Estado: ${estadoLabels[cotizacion.estado] ?? cotizacion.estado}`, fontSize: 8, color: "#b8c8ef" },
-            { text: `Fecha: ${fmtDate(cotizacion.created_at)}`, fontSize: 8, color: "#b8c8ef", margin: [0, 3, 0, 0] },
-            cotizacion.fecha_vigencia
-                ? { text: `Válida hasta: ${fmtDate(cotizacion.fecha_vigencia)}`, fontSize: 8, color: "#b8c8ef", margin: [0, 3, 0, 0] }
-                : null,
-        ].filter(Boolean);
-        const sectionDivider = {
-            canvas: [{ type: "line", x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: BORDER }],
-            margin: [0, 0, 0, 12],
-        };
-        const sectionLabel = (text) => ({
-            text: text.toUpperCase(),
-            fontSize: 7,
-            bold: true,
-            color: NAVY,
-            characterSpacing: 1.2,
-            margin: [0, 0, 0, 6],
-        });
-        const clienteRows = [];
-        if (contact) {
-            clienteRows.push({ text: contact.full_name, fontSize: 11, bold: true, color: DARK, margin: [0, 0, 0, 3] });
-            if (contact.company)
-                clienteRows.push({ text: contact.company, fontSize: 8.5, color: MUTED, margin: [0, 0, 0, 2] });
-            if (contact.email)
-                clienteRows.push({ text: contact.email, fontSize: 8.5, color: MUTED, margin: [0, 0, 0, 2] });
-            if (contact.phone)
-                clienteRows.push({ text: `Tel: ${contact.phone}`, fontSize: 8.5, color: MUTED });
-        }
-        else {
-            clienteRows.push({ text: "Cliente no especificado", fontSize: 9, color: MUTED });
-        }
-        const totalRows = [
-            [
-                { text: "Subtotal", fontSize: 9, color: MUTED, border: [false, false, false, false], margin: [0, 3, 0, 3] },
-                { text: `${cotizacion.moneda} ${fmtMoney(Number(cotizacion.subtotal))}`, fontSize: 9, alignment: "right", color: DARK, border: [false, false, false, false], margin: [0, 3, 0, 3] },
-            ],
-        ];
-        if (Number(cotizacion.descuento_monto) > 0) {
-            totalRows.push([
-                { text: `Descuento (${Number(cotizacion.descuento_pct).toFixed(1)}%)`, fontSize: 9, color: MUTED, border: [false, false, false, false], margin: [0, 0, 0, 3] },
-                { text: `− ${cotizacion.moneda} ${fmtMoney(Number(cotizacion.descuento_monto))}`, fontSize: 9, alignment: "right", color: "#e11d48", border: [false, false, false, false], margin: [0, 0, 0, 3] },
-            ]);
-        }
-        totalRows.push([
-            { text: `IGV (${Number(cotizacion.impuesto_pct).toFixed(0)}%)`, fontSize: 9, color: MUTED, border: [false, false, false, false], margin: [0, 0, 0, 6] },
-            { text: `${cotizacion.moneda} ${fmtMoney(Number(cotizacion.impuesto_monto))}`, fontSize: 9, alignment: "right", color: DARK, border: [false, false, false, false], margin: [0, 0, 0, 6] },
-        ]);
-        totalRows.push([
-            {
-                text: "TOTAL",
-                fontSize: 12,
-                bold: true,
-                color: NAVY,
-                border: [false, true, false, false],
-                borderColor: [[null, NAVY, null, null]],
-                margin: [0, 8, 0, 4],
-            },
-            {
-                text: `${cotizacion.moneda} ${fmtMoney(Number(cotizacion.total))}`,
-                fontSize: 14,
-                bold: true,
-                alignment: "right",
-                color: NAVY,
-                border: [false, true, false, false],
-                borderColor: [[null, NAVY, null, null]],
-                margin: [0, 8, 0, 4],
-            },
-        ]);
-        const docDefinition = {
-            defaultStyle: { font: "Helvetica", fontSize: 9, color: DARK },
-            pageSize: "A4",
-            pageMargins: [40, 40, 40, 50],
-            footer: (currentPage, pageCount) => ({
-                columns: [
-                    {
-                        stack: [
-                            { canvas: [{ type: "line", x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: BORDER }] },
-                            {
-                                text: empresa.nombre + (empresa.website ? `  ·  ${empresa.website}` : "") + (empresa.email ? `  ·  ${empresa.email}` : ""),
-                                fontSize: 7,
-                                color: MUTED,
-                                margin: [0, 6, 0, 0],
-                            },
-                        ],
-                        margin: [40, 8, 0, 0],
-                    },
-                    {
-                        text: `Página ${currentPage} / ${pageCount}`,
-                        alignment: "right",
-                        fontSize: 7,
-                        color: MUTED,
-                        margin: [0, 20, 40, 0],
-                    },
-                ],
-            }),
-            content: [
-                {
-                    table: {
-                        widths: ["*", "auto"],
-                        body: [
-                            [
-                                {
-                                    columns: [
-                                        ...(empresa.logo_base64
-                                            ? [{
-                                                    image: empresa.logo_base64,
-                                                    width: 60,
-                                                    margin: [0, 0, 14, 0],
-                                                }]
-                                            : []),
-                                        { stack: empresaInfoLines, margin: [0, 4, 0, 0] },
-                                    ],
-                                    border: [false, false, false, false],
-                                    fillColor: NAVY,
-                                    margin: [12, 14, 8, 14],
-                                },
-                                {
-                                    stack: cotNumStack,
-                                    alignment: "right",
-                                    border: [false, false, false, false],
-                                    fillColor: NAVY,
-                                    margin: [8, 14, 14, 14],
-                                },
-                            ],
-                        ],
-                    },
-                    layout: {
-                        hLineWidth: () => 0,
-                        vLineWidth: () => 0,
-                        paddingLeft: () => 0,
-                        paddingRight: () => 0,
-                        paddingTop: () => 0,
-                        paddingBottom: () => 0,
-                    },
-                    margin: [0, 0, 0, 20],
-                },
-                {
-                    columns: [
-                        {
-                            stack: [
-                                sectionLabel("Asunto"),
-                                { text: cotizacion.titulo, fontSize: 11, bold: true, color: DARK },
-                            ],
-                            width: "55%",
-                        },
-                        { width: 20, text: "" },
-                        {
-                            stack: [
-                                sectionLabel("Dirigido a"),
-                                ...clienteRows,
-                            ],
-                            width: "*",
-                        },
-                    ],
-                    margin: [0, 0, 0, 20],
-                },
-                sectionDivider,
-                sectionLabel("Detalle de productos / servicios"),
-                {
-                    table: {
-                        headerRows: 1,
-                        widths: [20, "*", 42, 68, 38, 66],
-                        body: tableRows,
-                    },
-                    layout: {
-                        hLineWidth: (i, node) => i === 0 || i === 1 || i === node.table.body.length ? 1 : 0.5,
-                        vLineWidth: () => 0,
-                        hLineColor: (i) => i === 0 || i === 1 ? NAVY : BORDER,
-                        fillColor: (row) => row === 0 ? NAVY : row % 2 === 0 ? SUBTLE_BG : null,
-                        paddingLeft: () => 6,
-                        paddingRight: () => 6,
-                        paddingTop: () => 5,
-                        paddingBottom: () => 5,
-                    },
-                    margin: [0, 0, 0, 20],
-                },
-                {
-                    columns: [
-                        { width: "*", text: "" },
-                        {
-                            width: 210,
-                            stack: [
-                                sectionLabel("Resumen"),
-                                {
-                                    table: {
-                                        widths: ["*", "auto"],
-                                        body: totalRows,
-                                    },
-                                    layout: {
-                                        hLineWidth: (i, node) => i === node.table.body.length - 1 ? 1.5 : 0,
-                                        vLineWidth: () => 0,
-                                        hLineColor: () => NAVY,
-                                        paddingTop: () => 2,
-                                        paddingBottom: () => 2,
-                                    },
-                                },
-                            ],
-                        },
-                    ],
-                    margin: [0, 0, 0, 20],
-                },
-                ...(cotizacion.observaciones
-                    ? [
-                        sectionDivider,
-                        sectionLabel("Observaciones"),
-                        { text: cotizacion.observaciones, fontSize: 8.5, color: DARK, margin: [0, 0, 0, 16] },
-                    ]
-                    : []),
-                sectionDivider,
-                sectionLabel("Términos y condiciones"),
-                {
-                    text: cotizacion.terminos ||
-                        empresa.terminos ||
-                        "La presente cotización tiene una validez de 30 días desde su fecha de emisión. Los precios indicados incluyen IGV.",
-                    fontSize: 8,
-                    color: MUTED,
-                },
-            ],
-            styles: {
-                thCell: {
-                    fontSize: 8,
-                    bold: true,
-                    color: WHITE,
-                },
-                tdCell: {
-                    fontSize: 8.5,
-                },
-                tdCellAlt: {
-                    fontSize: 8.5,
-                    fillColor: SUBTLE_BG,
-                },
-            },
-        };
-        return new Promise((resolve, reject) => {
-            try {
-                const pdfDoc = printer.createPdfKitDocument(docDefinition);
-                const chunks = [];
-                pdfDoc.on("data", (chunk) => chunks.push(chunk));
-                pdfDoc.on("end", () => resolve(Buffer.concat(chunks)));
-                pdfDoc.on("error", reject);
-                pdfDoc.end();
-            }
-            catch (err) {
-                reject(err);
-            }
-        });
+        return Buffer.from(await pdfDoc.save());
     }
 };
 exports.PdfService = PdfService;

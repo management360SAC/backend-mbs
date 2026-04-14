@@ -10,6 +10,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CreateCourseDto = void 0;
+const class_transformer_1 = require("class-transformer");
 const class_validator_1 = require("class-validator");
 class CreateCourseDto {
     code;
@@ -38,6 +39,7 @@ __decorate([
 ], CreateCourseDto.prototype, "description", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Transform)(({ value }) => (value !== undefined && value !== null ? String(value) : value)),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateCourseDto.prototype, "price", void 0);

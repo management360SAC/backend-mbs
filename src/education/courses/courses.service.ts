@@ -41,7 +41,15 @@ export class CoursesService {
 
   async update(id: number, dto: UpdateCourseDto) {
     await this.get(id);
-    await this.repo.update({ id }, dto);
+    const patch: Partial<Course> = {};
+    if (dto.code       !== undefined) patch.code           = dto.code;
+    if (dto.name       !== undefined) patch.name           = dto.name;
+    if (dto.description !== undefined) patch.description   = dto.description ?? null;
+    if (dto.price      !== undefined) patch.price          = dto.price ?? null;
+    if (dto.currency   !== undefined) patch.currency       = dto.currency;
+    if (dto.is_active  !== undefined) patch.isActive       = dto.is_active;
+    if (dto.moodle_course_id !== undefined) patch.moodleCourseId = dto.moodle_course_id ?? null;
+    await this.repo.update({ id }, patch);
     return this.get(id);
   }
 

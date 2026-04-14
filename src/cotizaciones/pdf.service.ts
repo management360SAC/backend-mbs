@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
-import { Cotizacion } from "./Cotizacion";
-import { CotizacionDetalle } from "./CotizacionDetalle";
+import { PDFDocument, rgb, RGB } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
+import * as fs from "fs";
+import * as path from "path";
 
 export interface EmpresaInfo {
   nombre: string;
@@ -20,15 +22,36 @@ export interface ContactInfo {
   company: string | null;
 }
 
-// ─── Paleta MBS ──────────────────────────────────────────────────────────────
-const NAVY       = "#0f2267";   // azul marino del logo
-const NAVY_LIGHT = "#1a3380";   // un tono más claro para detalles
-const ACCENT     = "#c8a84b";   // dorado académico (contraste elegante)
-const DARK       = "#1e293b";   // texto principal
-const MUTED      = "#64748b";   // texto secundario
-const SUBTLE_BG  = "#f5f7fc";   // fondo alternado de filas (muy tenue)
-const BORDER     = "#dde3f0";   // líneas separadoras
-const WHITE      = "#ffffff";
+export interface Cotizacion {
+  numero: string;
+  estado: string;
+  moneda: string;
+  subtotal: number;
+  descuento_pct: number;
+  descuento_monto: number;
+  impuesto_pct: number;
+  impuesto_monto: number;
+  total: number;
+  created_at: string | Date | null;
+  terminos: string | null;
+  observaciones?: string | null;
+}
+
+export interface CotizacionDetalle {
+  orden: number;
+  descripcion: string;
+  cantidad: number;
+  precio_unitario: number;
+  descuento_pct: number;
+  subtotal: number;
+}
+
+// ── Color palette ─────────────────────────────────────────────────────────────
+const NAVY      = rgb(2 / 255, 38 / 255, 89 / 255);
+const WHITE     = rgb(1, 1, 1);
+const TEXT_DARK = rgb(31 / 255, 43 / 255, 68 / 255);
+const TEXT_MUTED = rgb(101 / 255, 116 / 255, 139 / 255);
+const ROW_BG    = rgb(217 / 255, 221 / 255, 232 / 255);
 
 @Injectable()
 export class PdfService {
@@ -38,386 +61,170 @@ export class PdfService {
     empresa: EmpresaInfo,
     contact: ContactInfo | null,
   ): Promise<Buffer> {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const PdfPrinter = require("pdfmake");
+    // ── Load template ──────────────────────────────────────────────────────────
+    const templatePath = path.join(__dirname, "proforma-template.pdf");
+    const templateBytes = fs.readFileSync(templatePath);
+    const pdfDoc = await PDFDocument.load(templateBytes);
+    pdfDoc.registerFontkit(fontkit);
 
-    const fonts = {
-      Helvetica: {
-        normal: "Helvetica",
-        bold: "Helvetica-Bold",
-        italics: "Helvetica-Oblique",
-        bolditalics: "Helvetica-BoldOblique",
-      },
+    const page = pdfDoc.getPages()[0];
+    const { height } = page.getSize();
+
+    const arialBytes     = fs.readFileSync(path.join(__dirname, "arial.ttf"));
+    const arialBoldBytes = fs.readFileSync(path.join(__dirname, "arial-bold.ttf"));
+    const helv     = await pdfDoc.embedFont(arialBytes);
+    const helvBold = await pdfDoc.embedFont(arialBoldBytes);
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+    /** Draw text, y measured from the TOP of the page */
+    const T = (
+      text: string,
+      x: number,
+      yTop: number,
+      size: number,
+      bold = false,
+      color: RGB = TEXT_DARK,
+    ) => {
+      page.drawText(text, {
+        x,
+        y: height - yTop - size,
+        size,
+        font: bold ? helvBold : helv,
+        color,
+      });
     };
 
-    const printer = new PdfPrinter(fonts);
+    /** Draw text right-aligned to xRight, y from top */
+    const TR = (
+      text: string,
+      xRight: number,
+      yTop: number,
+      size: number,
+      bold = false,
+      color: RGB = TEXT_DARK,
+    ) => {
+      const f = bold ? helvBold : helv;
+      const w = f.widthOfTextAtSize(text, size);
+      T(text, xRight - w, yTop, size, bold, color);
+    };
+
+    /** Simple word-wrap: returns array of lines that fit within maxWidth */
+    const wrap = (text: string, maxW: number, size: number, bold = false): string[] => {
+      const f = bold ? helvBold : helv;
+      const lines: string[] = [];
+      let line = "";
+      for (const word of text.split(" ")) {
+        const test = line ? `${line} ${word}` : word;
+        if (f.widthOfTextAtSize(test, size) <= maxW) {
+          line = test;
+        } else {
+          if (line) lines.push(line);
+          line = word;
+        }
+      }
+      if (line) lines.push(line);
+      return lines;
+    };
 
     const fmtMoney = (v: number) =>
-      Number(v).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      Number(v).toLocaleString("es-PE", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
 
     const fmtDate = (d: string | Date | null) => {
       if (!d) return "—";
       return new Date(d).toLocaleDateString("es-PE", {
-        year: "numeric",
-        month: "long",
         day: "numeric",
+        month: "long",
+        year: "numeric",
       });
     };
 
-    const estadoLabels: Record<string, string> = {
-      BORRADOR: "Borrador",
-      GENERADA: "Generada",
-      ENVIADA: "Enviada",
-      ACEPTADA: "Aceptada",
+    const estadoLabel: Record<string, string> = {
+      BORRADOR:  "Borrador",
+      GENERADA:  "Generada",
+      ENVIADA:   "Enviada",
+      ACEPTADA:  "Aceptada",
       RECHAZADA: "Rechazada",
-      VENCIDA: "Vencida",
+      VENCIDA:   "Vencida",
     };
 
-    // ─── Filas de la tabla de productos ────────────────────────────────────
-    const sortedDetalles = [...detalles].sort((a, b) => a.orden - b.orden);
+    // ── 1. Cotización número (bajo la línea que está debajo de "COTIZACIÓN") ────
+    TR(cotizacion.numero, 565, 102, 11, true, NAVY);
 
-    const tableRows: any[] = [
-      // Header row
-      [
-        { text: "#",            style: "thCell", alignment: "center" },
-        { text: "Descripción",  style: "thCell" },
-        { text: "Cant.",        style: "thCell", alignment: "right" },
-        { text: "P. Unitario",  style: "thCell", alignment: "right" },
-        { text: "Desc. %",      style: "thCell", alignment: "right" },
-        { text: "Subtotal",     style: "thCell", alignment: "right" },
-      ],
-    ];
+    // ── 2. Estado value dentro del pill ────────────────────────────────────────
+    T(estadoLabel[cotizacion.estado] ?? cotizacion.estado, 295, 144, 9, true, WHITE);
 
-    sortedDetalles.forEach((d, i) => {
-      const isEven = i % 2 === 0;
-      const cellStyle = isEven ? "tdCellAlt" : "tdCell";
-      tableRows.push([
-        { text: String(i + 1), style: cellStyle, alignment: "center", color: MUTED },
-        { text: d.descripcion,  style: cellStyle, color: DARK },
-        { text: Number(d.cantidad).toFixed(2),              style: cellStyle, alignment: "right", color: DARK },
-        { text: `${cotizacion.moneda} ${fmtMoney(Number(d.precio_unitario))}`, style: cellStyle, alignment: "right", color: DARK },
-        { text: `${Number(d.descuento_pct).toFixed(1)}%`,   style: cellStyle, alignment: "right", color: MUTED },
-        { text: `${cotizacion.moneda} ${fmtMoney(Number(d.subtotal))}`, style: cellStyle, alignment: "right", bold: true, color: DARK },
-      ]);
-    });
+    // ── 3. Fecha value dentro del pill ─────────────────────────────────────────
+    T(fmtDate(cotizacion.created_at), 455, 144, 9, false, WHITE);
 
-    // ─── Columna izquierda del header: logo + datos empresa ────────────────
-    const logoStack: any[] = [];
-    if (empresa.logo_base64) {
-      try {
-        // El logo tiene fondo navy — va directo, sin marco
-        logoStack.push({ image: empresa.logo_base64, width: 64, margin: [0, 0, 0, 0] });
-      } catch { /* skip */ }
+    // ── 5. DIRIGIDO A — client info ────────────────────────────────────────────
+    const clientName    = contact?.full_name || "";
+    const clientCompany = contact?.company   || "";
+    const clientEmail   = contact?.email     || "";
+    const clientPhone   = contact?.phone ? `Tel: ${contact.phone}` : "";
+
+    if (clientName)    T(clientName,    65, 222, 18, true,  TEXT_DARK);
+    if (clientCompany) T(clientCompany, 65, 248, 11, false, TEXT_MUTED);
+    if (clientEmail)   T(clientEmail,   65, 264, 11, false, TEXT_MUTED);
+    if (clientPhone)   T(clientPhone,   65, 280, 11, false, TEXT_MUTED);
+
+    // ── 6. Table rows ──────────────────────────────────────────────────────────
+    const sorted   = [...detalles].sort((a, b) => a.orden - b.orden);
+    const ROW_H    = 22;
+    let tableYTop  = 352; // y from top where first data row starts
+
+    for (let i = 0; i < sorted.length; i++) {
+      const item = sorted[i];
+
+      // Row background
+      page.drawRectangle({
+        x: 28,
+        y: height - tableYTop - ROW_H,
+        width: 542,
+        height: ROW_H,
+        color: ROW_BG,
+      });
+
+      const ty = tableYTop + 7; // text baseline from top
+      T(  String(i + 1),                                               44,  ty, 9);
+      T(  item.descripcion.substring(0, 68),                           70,  ty, 9);
+      TR( Number(item.cantidad).toFixed(2),                           358,  ty, 9);
+      TR( `${cotizacion.moneda} ${fmtMoney(Number(item.precio_unitario))}`, 452, ty, 9);
+      TR( `${Number(item.descuento_pct).toFixed(1)}%`,                506,  ty, 9);
+      TR( `${cotizacion.moneda} ${fmtMoney(Number(item.subtotal))}`,  566,  ty, 9, true);
+
+      tableYTop += ROW_H;
     }
 
-    const empresaInfoLines: any[] = [
-      { text: empresa.nombre, fontSize: 13, bold: true, color: WHITE, margin: [0, 0, 0, 2] },
-    ];
-    if (empresa.ruc)      empresaInfoLines.push({ text: `RUC: ${empresa.ruc}`,           fontSize: 7.5, color: "#b8c8ef", margin: [0, 1, 0, 0] });
-    if (empresa.direccion) empresaInfoLines.push({ text: empresa.direccion,               fontSize: 7.5, color: "#b8c8ef", margin: [0, 1, 0, 0] });
-    if (empresa.telefono)  empresaInfoLines.push({ text: `Tel: ${empresa.telefono}`,      fontSize: 7.5, color: "#b8c8ef", margin: [0, 1, 0, 0] });
-    if (empresa.email)     empresaInfoLines.push({ text: empresa.email,                   fontSize: 7.5, color: "#b8c8ef", margin: [0, 1, 0, 0] });
+    // ── 7. RESUMEN values ──────────────────────────────────────────────────────
+    // Labels (Subtotal, IGV, TOTAL) are already in the template as static text.
+    // Only the numeric values are placed here.
+    const cur = cotizacion.moneda;
 
-    // ─── Columna derecha del header: número de cotización ──────────────────
-    const cotNumStack: any[] = [
-      { text: "COTIZACIÓN", fontSize: 8, bold: true, color: ACCENT, characterSpacing: 1.5, margin: [0, 0, 0, 4] },
-      { text: cotizacion.numero, fontSize: 18, bold: true, color: WHITE, margin: [0, 0, 0, 6] },
-      {
-        canvas: [{ type: "line", x1: 0, y1: 0, x2: 110, y2: 0, lineWidth: 0.5, lineColor: ACCENT }],
-        margin: [0, 0, 0, 6],
-      },
-      { text: `Estado: ${estadoLabels[cotizacion.estado] ?? cotizacion.estado}`, fontSize: 8, color: "#b8c8ef" },
-      { text: `Fecha: ${fmtDate(cotizacion.created_at)}`, fontSize: 8, color: "#b8c8ef", margin: [0, 3, 0, 0] },
-      cotizacion.fecha_vigencia
-        ? { text: `Válida hasta: ${fmtDate(cotizacion.fecha_vigencia)}`, fontSize: 8, color: "#b8c8ef", margin: [0, 3, 0, 0] }
-        : null,
-    ].filter(Boolean);
+    TR(`${cur} ${fmtMoney(Number(cotizacion.subtotal))}`,      566, 508, 11);
+    TR(`${cur} ${fmtMoney(Number(cotizacion.impuesto_monto))}`, 566, 526, 11);
+    TR(`${cur} ${fmtMoney(Number(cotizacion.total))}`,         566, 556, 16, true, NAVY);
 
-    // ─── Separador de sección ───────────────────────────────────────────────
-    const sectionDivider = {
-      canvas: [{ type: "line", x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: BORDER }],
-      margin: [0, 0, 0, 12],
-    };
+    // ── 8. TÉRMINOS text ───────────────────────────────────────────────────────
+    // Cubre el texto con caracteres mal codificados del template y reemplaza con texto correcto.
+    page.drawRectangle({ x: 28, y: height - 690, width: 540, height: 80, color: WHITE });
 
-    const sectionLabel = (text: string) => ({
-      text: text.toUpperCase(),
-      fontSize: 7,
-      bold: true,
-      color: NAVY,
-      characterSpacing: 1.2,
-      margin: [0, 0, 0, 6],
+    const terminos =
+      cotizacion.terminos ||
+      empresa.terminos ||
+      "La presente cotización tiene una validez de 30 días desde su fecha de emisión. " +
+      "Los precios incluyen IGV (18%). Forma de pago: 50% al inicio y 50% a la entrega.";
+
+    const terminosLines = wrap(terminos, 530, 9);
+    terminosLines.slice(0, 4).forEach((line, i) => {
+      T(line, 35, 628 + i * 12, 9, false, TEXT_MUTED);
     });
 
-    // ─── Bloque datos del cliente ───────────────────────────────────────────
-    const clienteRows: any[] = [];
-    if (contact) {
-      clienteRows.push(
-        { text: contact.full_name, fontSize: 11, bold: true, color: DARK, margin: [0, 0, 0, 3] },
-      );
-      if (contact.company) clienteRows.push({ text: contact.company, fontSize: 8.5, color: MUTED, margin: [0, 0, 0, 2] });
-      if (contact.email)   clienteRows.push({ text: contact.email,   fontSize: 8.5, color: MUTED, margin: [0, 0, 0, 2] });
-      if (contact.phone)   clienteRows.push({ text: `Tel: ${contact.phone}`, fontSize: 8.5, color: MUTED });
-    } else {
-      clienteRows.push({ text: "Cliente no especificado", fontSize: 9, color: MUTED });
-    }
+    // ── 9. FOOTER: la plantilla ya tiene el diseño, no se modifican rectángulos ──
 
-    // ─── Totales ────────────────────────────────────────────────────────────
-    const totalRows: any[][] = [
-      [
-        { text: "Subtotal", fontSize: 9, color: MUTED,  border: [false, false, false, false], margin: [0, 3, 0, 3] },
-        { text: `${cotizacion.moneda} ${fmtMoney(Number(cotizacion.subtotal))}`, fontSize: 9, alignment: "right", color: DARK, border: [false, false, false, false], margin: [0, 3, 0, 3] },
-      ],
-    ];
-
-    if (Number(cotizacion.descuento_monto) > 0) {
-      totalRows.push([
-        { text: `Descuento (${Number(cotizacion.descuento_pct).toFixed(1)}%)`, fontSize: 9, color: MUTED, border: [false, false, false, false], margin: [0, 0, 0, 3] },
-        { text: `− ${cotizacion.moneda} ${fmtMoney(Number(cotizacion.descuento_monto))}`, fontSize: 9, alignment: "right", color: "#e11d48", border: [false, false, false, false], margin: [0, 0, 0, 3] },
-      ]);
-    }
-
-    totalRows.push([
-      { text: `IGV (${Number(cotizacion.impuesto_pct).toFixed(0)}%)`, fontSize: 9, color: MUTED, border: [false, false, false, false], margin: [0, 0, 0, 6] },
-      { text: `${cotizacion.moneda} ${fmtMoney(Number(cotizacion.impuesto_monto))}`, fontSize: 9, alignment: "right", color: DARK, border: [false, false, false, false], margin: [0, 0, 0, 6] },
-    ]);
-
-    // Fila total con línea superior
-    totalRows.push([
-      {
-        text: "TOTAL",
-        fontSize: 12,
-        bold: true,
-        color: NAVY,
-        border: [false, true, false, false],
-        borderColor: [[null, NAVY, null, null]],
-        margin: [0, 8, 0, 4],
-      },
-      {
-        text: `${cotizacion.moneda} ${fmtMoney(Number(cotizacion.total))}`,
-        fontSize: 14,
-        bold: true,
-        alignment: "right",
-        color: NAVY,
-        border: [false, true, false, false],
-        borderColor: [[null, NAVY, null, null]],
-        margin: [0, 8, 0, 4],
-      },
-    ]);
-
-    // ─── Documento ──────────────────────────────────────────────────────────
-    const docDefinition: any = {
-      defaultStyle: { font: "Helvetica", fontSize: 9, color: DARK },
-      pageSize: "A4",
-      pageMargins: [40, 40, 40, 50],
-
-      footer: (currentPage: number, pageCount: number) => ({
-        columns: [
-          {
-            stack: [
-              { canvas: [{ type: "line", x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: BORDER }] },
-              {
-                text: empresa.nombre + (empresa.website ? `  ·  ${empresa.website}` : "") + (empresa.email ? `  ·  ${empresa.email}` : ""),
-                fontSize: 7,
-                color: MUTED,
-                margin: [0, 6, 0, 0],
-              },
-            ],
-            margin: [40, 8, 0, 0],
-          },
-          {
-            text: `Página ${currentPage} / ${pageCount}`,
-            alignment: "right",
-            fontSize: 7,
-            color: MUTED,
-            margin: [0, 20, 40, 0],
-          },
-        ],
-      }),
-
-      content: [
-        // ═══════════════════════════════════════════════════════════════════
-        // HEADER — Banda navy completa
-        // ═══════════════════════════════════════════════════════════════════
-        {
-          table: {
-            widths: ["*", "auto"],
-            body: [
-              [
-                // Columna izquierda: logo + datos empresa
-                {
-                  columns: [
-                    ...(empresa.logo_base64
-                      ? [{
-                          image: empresa.logo_base64,
-                          width: 60,
-                          margin: [0, 0, 14, 0],
-                        }]
-                      : []),
-                    { stack: empresaInfoLines, margin: [0, 4, 0, 0] },
-                  ],
-                  border: [false, false, false, false],
-                  fillColor: NAVY,
-                  margin: [12, 14, 8, 14],
-                },
-                // Columna derecha: número de cotización
-                {
-                  stack: cotNumStack,
-                  alignment: "right",
-                  border: [false, false, false, false],
-                  fillColor: NAVY,
-                  margin: [8, 14, 14, 14],
-                },
-              ],
-            ],
-          },
-          layout: {
-            hLineWidth: () => 0,
-            vLineWidth: () => 0,
-            paddingLeft: () => 0,
-            paddingRight: () => 0,
-            paddingTop: () => 0,
-            paddingBottom: () => 0,
-          },
-          margin: [0, 0, 0, 20],
-        },
-
-        // ═══════════════════════════════════════════════════════════════════
-        // ASUNTO + CLIENTE
-        // ═══════════════════════════════════════════════════════════════════
-        {
-          columns: [
-            // Asunto
-            {
-              stack: [
-                sectionLabel("Asunto"),
-                { text: cotizacion.titulo, fontSize: 11, bold: true, color: DARK },
-              ],
-              width: "55%",
-            },
-            { width: 20, text: "" },
-            // Cliente
-            {
-              stack: [
-                sectionLabel("Dirigido a"),
-                ...clienteRows,
-              ],
-              width: "*",
-            },
-          ],
-          margin: [0, 0, 0, 20],
-        },
-
-        sectionDivider,
-
-        // ═══════════════════════════════════════════════════════════════════
-        // TABLA DE PRODUCTOS
-        // ═══════════════════════════════════════════════════════════════════
-        sectionLabel("Detalle de productos / servicios"),
-        {
-          table: {
-            headerRows: 1,
-            widths: [20, "*", 42, 68, 38, 66],
-            body: tableRows,
-          },
-          layout: {
-            hLineWidth: (i: number, node: any) =>
-              i === 0 || i === 1 || i === node.table.body.length ? 1 : 0.5,
-            vLineWidth: () => 0,
-            hLineColor: (i: number) =>
-              i === 0 || i === 1 ? NAVY : BORDER,
-            fillColor: (row: number) =>
-              row === 0 ? NAVY : row % 2 === 0 ? SUBTLE_BG : null,
-            paddingLeft:   () => 6,
-            paddingRight:  () => 6,
-            paddingTop:    () => 5,
-            paddingBottom: () => 5,
-          },
-          margin: [0, 0, 0, 20],
-        },
-
-        // ═══════════════════════════════════════════════════════════════════
-        // TOTALES
-        // ═══════════════════════════════════════════════════════════════════
-        {
-          columns: [
-            { width: "*", text: "" },
-            {
-              width: 210,
-              stack: [
-                sectionLabel("Resumen"),
-                {
-                  table: {
-                    widths: ["*", "auto"],
-                    body: totalRows,
-                  },
-                  layout: {
-                    hLineWidth: (i: number, node: any) =>
-                      i === node.table.body.length - 1 ? 1.5 : 0,
-                    vLineWidth: () => 0,
-                    hLineColor: () => NAVY,
-                    paddingTop: () => 2,
-                    paddingBottom: () => 2,
-                  },
-                },
-              ],
-            },
-          ],
-          margin: [0, 0, 0, 20],
-        },
-
-        // ═══════════════════════════════════════════════════════════════════
-        // OBSERVACIONES
-        // ═══════════════════════════════════════════════════════════════════
-        ...(cotizacion.observaciones
-          ? [
-              sectionDivider,
-              sectionLabel("Observaciones"),
-              { text: cotizacion.observaciones, fontSize: 8.5, color: DARK, margin: [0, 0, 0, 16] },
-            ]
-          : []),
-
-        // ═══════════════════════════════════════════════════════════════════
-        // TÉRMINOS Y CONDICIONES
-        // ═══════════════════════════════════════════════════════════════════
-        sectionDivider,
-        sectionLabel("Términos y condiciones"),
-        {
-          text:
-            cotizacion.terminos ||
-            empresa.terminos ||
-            "La presente cotización tiene una validez de 30 días desde su fecha de emisión. Los precios indicados incluyen IGV.",
-          fontSize: 8,
-          color: MUTED,
-        },
-      ],
-
-      styles: {
-        thCell: {
-          fontSize: 8,
-          bold: true,
-          color: WHITE,
-        },
-        tdCell: {
-          fontSize: 8.5,
-        },
-        tdCellAlt: {
-          fontSize: 8.5,
-          fillColor: SUBTLE_BG,
-        },
-      },
-    };
-
-    return new Promise((resolve, reject) => {
-      try {
-        const pdfDoc = printer.createPdfKitDocument(docDefinition);
-        const chunks: Buffer[] = [];
-        pdfDoc.on("data", (chunk: Buffer) => chunks.push(chunk));
-        pdfDoc.on("end", () => resolve(Buffer.concat(chunks)));
-        pdfDoc.on("error", reject);
-        pdfDoc.end();
-      } catch (err) {
-        reject(err);
-      }
-    });
+    // ── Return ─────────────────────────────────────────────────────────────────
+    return Buffer.from(await pdfDoc.save());
   }
 }
