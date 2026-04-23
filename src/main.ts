@@ -5,7 +5,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix("api");
   app.enableCors({
-    origin: ["http://91.99.16.147:8181/", "https://crm.mbs.pe", "https://crm.mbs.pe:80", "https://crm.mbs.pe:8181"],
+    origin: ["https://crm.mbs.pe"],
     credentials: true,
   });
   app.useGlobalPipes(
