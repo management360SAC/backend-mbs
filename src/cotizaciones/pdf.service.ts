@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PDFDocument, rgb, RGB } from "pdf-lib";
-import fontkit from "@pdf-lib/fontkit";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const fontkit = require("@pdf-lib/fontkit") as any;
 import * as fs from "fs";
 import * as path from "path";
 

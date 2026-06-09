@@ -13,6 +13,7 @@ import { EmpresaConfigModule } from "./empresa-config/empresa-config.module";
 import { PaymentsModule } from "./payments/payments.module";
 import { ActivityLogsModule } from "./activity-logs/activity-logs.module";
 import { EmpresaClienteModule } from "./empresa-cliente/empresa-cliente.module";
+import { FacebookLeadsModule } from "./facebook-leads/facebook-leads.module";
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { EmpresaClienteModule } from "./empresa-cliente/empresa-cliente.module";
     PaymentsModule,
     ActivityLogsModule,
     EmpresaClienteModule,
+    FacebookLeadsModule,
   ],
 })
 export class AppModule {}

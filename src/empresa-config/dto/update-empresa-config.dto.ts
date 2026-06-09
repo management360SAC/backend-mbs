@@ -52,4 +52,12 @@ export class UpdateEmpresaConfigDto {
   @IsOptional()
   @IsString()
   smtp_from?: string | null;
+
+  @IsOptional()
+  @IsString()
+  fb_verify_token?: string | null;
+
+  @IsOptional()
+  @IsString()
+  fb_page_access_token?: string | null;
 }

@@ -50,6 +50,13 @@ export class EmpresaConfig {
   @Column({ type: "varchar", length: 150, nullable: true })
   smtp_from: string | null;
 
+  // ─── Facebook Lead Ads ────────────────────────────────────────────────────
+  @Column({ type: "varchar", length: 200, nullable: true })
+  fb_verify_token: string | null;
+
+  @Column({ type: "text", nullable: true })
+  fb_page_access_token: string | null;
+
   @CreateDateColumn()
   created_at: Date;
 
