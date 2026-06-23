@@ -40,7 +40,7 @@ export class FacebookLeadsController {
     @Query("hub.challenge") challenge: string,
     @Res() res: Response,
   ) {
-    const expectedToken = process.env.FB_VERIFY_TOKEN ?? "";
+    const expectedToken = process.env.TOKEN_META ?? process.env.FB_VERIFY_TOKEN ?? "";
 
     this.logger.log(
       `Meta webhook verify — mode="${mode}" token_match=${token === expectedToken} challenge="${challenge}"`,
