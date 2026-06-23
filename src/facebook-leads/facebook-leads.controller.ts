@@ -27,34 +27,44 @@ export class FacebookLeadsController {
 
   constructor(private readonly service: FacebookLeadsService) {}
 
-  /** Verificación del webhook por parte de Facebook */
+  /**
+   * GET /facebook/webhook
+   * Meta llama este endpoint para validar el webhook.
+   * Debe responder HTTP 200 con el challenge exacto como texto plano.
+   * No requiere autenticación — está excluido del globalPrefix y del TenantMiddleware.
+   */
   @Get("webhook")
-  async verify(
+  verifyWebhook(
     @Query("hub.mode") mode: string,
     @Query("hub.verify_token") token: string,
     @Query("hub.challenge") challenge: string,
     @Res() res: Response,
   ) {
-    // Env var tiene prioridad; si no, cae a lo guardado en BD
-    const envToken = process.env.FB_VERIFY_TOKEN;
-    const config = envToken ? null : await this.service.getConfig();
-    const verifyToken = envToken ?? config?.fb_verify_token;
+    const expectedToken = process.env.FB_VERIFY_TOKEN ?? "";
 
-    this.logger.log(`Verificación webhook — mode: ${mode}, token recibido: ${token}, token esperado: ${verifyToken}`);
+    this.logger.log(
+      `Meta webhook verify — mode="${mode}" token_match=${token === expectedToken} challenge="${challenge}"`,
+    );
 
-    if (mode === "subscribe" && token === verifyToken) {
-      this.logger.log("Webhook de Facebook verificado correctamente");
+    if (!expectedToken) {
+      this.logger.error("FB_VERIFY_TOKEN no está configurado en las variables de entorno");
+      return res.status(500).send("Server misconfiguration");
+    }
+
+    if (mode === "subscribe" && token === expectedToken) {
+      this.logger.log("Webhook Meta verificado correctamente");
+      res.setHeader("Content-Type", "text/plain");
       return res.status(200).send(challenge);
     }
 
-    this.logger.warn(`Verificación fallida — token recibido: ${token}, esperado: ${verifyToken}`);
+    this.logger.warn(`Verificación Meta fallida — token recibido: "${token}", esperado: "${expectedToken}"`);
     return res.status(403).send("Forbidden");
   }
 
-  /** Notificaciones de nuevos leads desde Facebook */
+  /** POST /facebook/webhook — Notificaciones de nuevos leads */
   @Post("webhook")
   @HttpCode(200)
-  async receive(@Body() body: FbWebhookBody) {
+  async receiveWebhook(@Body() body: FbWebhookBody) {
     if (body?.object !== "page") return { ok: true };
 
     const entries = body.entry ?? [];

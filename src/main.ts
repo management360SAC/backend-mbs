@@ -3,9 +3,11 @@ import { AppModule } from "./app.module";
 import { ValidationPipe } from "@nestjs/common";
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.setGlobalPrefix("api");
+  app.setGlobalPrefix("api", {
+    exclude: ["facebook/webhook"],
+  });
   app.enableCors({
-    origin: ["https://crm.mbs.pe"],
+    origin: ["https://crm.mbs.pe", "http://localhost:5174", "http://localhost:5175", "http://localhost:5173"],
     credentials: true,
   });
   app.useGlobalPipes(

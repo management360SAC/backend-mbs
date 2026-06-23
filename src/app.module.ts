@@ -1,6 +1,5 @@
-import { Module } from "@nestjs/common";
-import { ConfigModule, ConfigService } from "@nestjs/config";
-import { TypeOrmModule } from "@nestjs/typeorm";
+import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
 import { AuthModule } from "./auth/auth.module";
 import { UsersModule } from "./users/users.module";
 import { RolesModule } from "./roles/roles.module";
@@ -14,25 +13,16 @@ import { PaymentsModule } from "./payments/payments.module";
 import { ActivityLogsModule } from "./activity-logs/activity-logs.module";
 import { EmpresaClienteModule } from "./empresa-cliente/empresa-cliente.module";
 import { FacebookLeadsModule } from "./facebook-leads/facebook-leads.module";
+import { PrismaModule } from "./prisma/prisma.module";
+import { TenantModule } from "./tenant/tenant.module";
+import { TenantMiddleware } from "./tenant/tenant.middleware";
+import { AdminModule } from "./admin/admin.module";
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-
-    TypeOrmModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (cfg: ConfigService) => ({
-        type: "mysql",
-        host: cfg.get("DB_HOST"),
-        port: Number(cfg.get("DB_PORT")),
-        username: cfg.get("DB_USER"),
-        password: cfg.get("DB_PASS"),
-        database: cfg.get("DB_NAME"),
-        autoLoadEntities: true,
-        synchronize: false,
-      }),
-    }),
-
+    PrismaModule,
+    TenantModule,
     AuthModule,
     UsersModule,
     RolesModule,
@@ -46,6 +36,14 @@ import { FacebookLeadsModule } from "./facebook-leads/facebook-leads.module";
     ActivityLogsModule,
     EmpresaClienteModule,
     FacebookLeadsModule,
+    AdminModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(TenantMiddleware)
+      .exclude("auth/login", "admin/tenants/public", "facebook/webhook")
+      .forRoutes("*");
+  }
+}
