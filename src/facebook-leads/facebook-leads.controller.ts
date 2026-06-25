@@ -40,24 +40,31 @@ export class FacebookLeadsController {
     @Query("hub.challenge") challenge: string,
     @Res() res: Response,
   ) {
-    const expectedToken = process.env.TOKEN_META ?? process.env.FB_VERIFY_TOKEN ?? "";
+    const expectedToken = (process.env.TOKEN_META ?? process.env.FB_VERIFY_TOKEN ?? "").trim();
+    const receivedToken = (token ?? "").trim();
 
     this.logger.log(
-      `Meta webhook verify — mode="${mode}" token_match=${token === expectedToken} challenge="${challenge}"`,
+      `Meta webhook verify — mode="${mode}" challenge="${challenge}" token_match=${receivedToken === expectedToken}`,
     );
 
     if (!expectedToken) {
-      this.logger.error("FB_VERIFY_TOKEN no está configurado en las variables de entorno");
+      this.logger.error("FB_VERIFY_TOKEN no está configurado");
       return res.status(500).send("Server misconfiguration");
     }
 
-    if (mode === "subscribe" && token === expectedToken) {
-      this.logger.log("Webhook Meta verificado correctamente");
-      res.setHeader("Content-Type", "text/plain");
-      return res.status(200).send(challenge);
+    if (!challenge) {
+      this.logger.warn("Meta no envió hub.challenge");
+      return res.status(400).send("Bad Request");
     }
 
-    this.logger.warn(`Verificación Meta fallida — token recibido: "${token}", esperado: "${expectedToken}"`);
+    if (mode === "subscribe" && receivedToken === expectedToken) {
+      this.logger.log("Webhook Meta verificado OK");
+      return res.status(200).contentType("text/plain").send(challenge);
+    }
+
+    this.logger.warn(
+      `Verificación fallida — recibido: "${receivedToken}" (${receivedToken.length} chars) esperado: "${expectedToken}" (${expectedToken.length} chars)`,
+    );
     return res.status(403).send("Forbidden");
   }
 
