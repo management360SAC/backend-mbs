@@ -2,7 +2,9 @@ import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 function createAdapter() {
-  return new PrismaMariaDb(process.env.DATABASE_MASTER_URL as string);
+  const url = process.env.DATABASE_MASTER_URL;
+  if (!url) throw new Error("DATABASE_MASTER_URL env var is not set");
+  return new PrismaMariaDb(url);
 }
 
 @Injectable()
