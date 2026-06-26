@@ -73,11 +73,11 @@ export class TenantProvisioningService {
       throw new ConflictException(`Ya existe un tenant con slug '${slug}' o db '${dbName}'`);
     }
 
-    const adminUrl = process.env.DATABASE_ADMIN_URL;
-    if (!adminUrl) throw new BadRequestException("DATABASE_ADMIN_URL no configurada");
-
-    // Parse admin URL for host/port/user/pass
-    const { host, port, username, password } = this.parseUrl(adminUrl);
+    const host = process.env.DB_HOST;
+    if (!host) throw new BadRequestException("DB_HOST no configurado");
+    const port = parseInt(process.env.DB_PORT ?? "3306");
+    const username = process.env.DB_USER ?? "crm";
+    const password = process.env.DB_PASS ?? "crm";
 
     // 1. Create the database using admin credentials
     const adminDs = new DataSource({
@@ -187,10 +187,4 @@ export class TenantProvisioningService {
     this.logger.log(`Default data seeded for new tenant`);
   }
 
-  private parseUrl(url: string): { host: string; port: number; username: string; password: string } {
-    // mysql://user:pass@host:port/db
-    const match = url.match(/mysql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)/);
-    if (!match) throw new BadRequestException("Invalid DATABASE_ADMIN_URL format");
-    return { username: match[1], password: match[2], host: match[3], port: Number(match[4]) };
-  }
 }
