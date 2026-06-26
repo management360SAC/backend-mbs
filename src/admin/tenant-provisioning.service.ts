@@ -1,16 +1,20 @@
-import { Injectable, Logger, ConflictException, BadRequestException } from "@nestjs/common";
-import { DataSource } from "typeorm";
+import { Injectable, Logger, ConflictException, BadRequestException, NotFoundException } from "@nestjs/common";
+import { DataSource, In } from "typeorm";
 import * as bcrypt from "bcryptjs";
 import { PrismaService } from "../prisma/prisma.service";
 import { TENANT_ENTITIES } from "../tenant/tenant-entities";
 import { TenantDataSourceService } from "../tenant/tenant-datasource.service";
+import { TenantInfo } from "../tenant/tenant.context";
 import { User } from "../users/user.entity";
 import { Role } from "../roles/role.entity";
 import { RolePermission } from "../roles/role-permission.entity";
 import { Permission } from "../permissions/permission.entity";
 import { UserRole } from "../users/user-role.entity";
 import { LeadStage } from "../marketing/lead-stages/LeadStages";
+import { EmpresaConfig } from "../empresa-config/EmpresaConfig";
 import { CreateTenantDto } from "./dto/create-tenant.dto";
+import { CreateUserDto } from "../users/dto/users.dto";
+import { UpdateEmpresaConfigDto } from "../empresa-config/dto/update-empresa-config.dto";
 
 const DEFAULT_PERMISSIONS = [
   { code: "users.create",      module: "users",       action: "create",  description: "Crear usuarios" },
@@ -192,5 +196,81 @@ export class TenantProvisioningService {
     const match = url.match(/mysql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)/);
     if (!match) throw new BadRequestException("Invalid DATABASE_ADMIN_URL format");
     return { username: match[1], password: match[2], host: match[3], port: Number(match[4]) };
+  }
+
+  private async resolveTenantInfo(slug: string): Promise<TenantInfo> {
+    const tenant = await this.prisma.tenant.findUnique({ where: { slug } });
+    if (!tenant) throw new NotFoundException(`Empresa '${slug}' no encontrada`);
+    return { id: tenant.id, slug: tenant.slug, dbName: tenant.dbName, dbHost: tenant.dbHost, dbPort: tenant.dbPort, dbUser: tenant.dbUser, dbPass: tenant.dbPass };
+  }
+
+  async listTenantUsers(slug: string) {
+    const info = await this.resolveTenantInfo(slug);
+    const repo = await this.tds.getRepository(User, info);
+    const users = await repo.find({
+      relations: { userRoles: { role: true } },
+      order: { createdAt: "DESC" },
+    });
+    return users.map((u) => ({
+      id: u.id,
+      email: u.email,
+      full_name: u.fullName,
+      is_active: u.isActive,
+      last_login_at: u.lastLoginAt,
+      created_at: u.createdAt,
+      roles: (u.userRoles ?? []).map((ur) => ur.role).filter(Boolean).map((r) => ({ id: r.id, code: r.code, name: r.name })),
+    }));
+  }
+
+  async createTenantUser(slug: string, dto: CreateUserDto) {
+    const info = await this.resolveTenantInfo(slug);
+    const repo = await this.tds.getRepository(User, info);
+    const email = dto.email.trim().toLowerCase();
+    const exists = await repo.findOne({ where: { email } as any });
+    if (exists) throw new ConflictException("Email already exists");
+
+    const user = repo.create({ email, fullName: dto.full_name.trim(), isActive: dto.is_active ?? true, lastLoginAt: null });
+    const salt = await bcrypt.genSalt(10);
+    user.passwordHash = await bcrypt.hash(dto.password, salt);
+    const saved = await repo.save(user);
+
+    if (dto.role_ids?.length) {
+      const urRepo = await this.tds.getRepository(UserRole, info);
+      const roleRepo = await this.tds.getRepository(Role, info);
+      const uniqueIds = Array.from(new Set(dto.role_ids.map(Number).filter(Boolean)));
+      const roles = await roleRepo.find({ where: { id: In(uniqueIds) } as any });
+      for (const role of roles) {
+        await urRepo.save(urRepo.create({ userId: saved.id, roleId: role.id }));
+      }
+    }
+
+    const full = await repo.findOne({ where: { id: saved.id } as any, relations: { userRoles: { role: true } } });
+    const u = full!;
+    return {
+      id: u.id, email: u.email, full_name: u.fullName, is_active: u.isActive, last_login_at: u.lastLoginAt, created_at: u.createdAt,
+      roles: (u.userRoles ?? []).map((ur) => ur.role).filter(Boolean).map((r) => ({ id: r.id, code: r.code, name: r.name })),
+    };
+  }
+
+  async getTenantConfig(slug: string) {
+    const info = await this.resolveTenantInfo(slug);
+    const repo = await this.tds.getRepository(EmpresaConfig, info);
+    let config = await repo.findOne({ where: { id: 1 } });
+    if (!config) {
+      config = repo.create({ id: 1, nombre: slug });
+      await repo.save(config);
+    }
+    return config;
+  }
+
+  async updateTenantConfig(slug: string, dto: UpdateEmpresaConfigDto) {
+    const info = await this.resolveTenantInfo(slug);
+    const repo = await this.tds.getRepository(EmpresaConfig, info);
+    let config = await repo.findOne({ where: { id: 1 } });
+    if (!config) {
+      config = repo.create({ id: 1, nombre: slug });
+    }
+    Object.assign(config, dto);
+    return repo.save(config);
   }
 }
