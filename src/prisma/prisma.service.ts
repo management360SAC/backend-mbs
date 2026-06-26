@@ -2,9 +2,15 @@ import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 function createAdapter() {
-  const raw = process.env.DATABASE_URL;
-  if (!raw) throw new Error("DATABASE_URL env var is not set");
-  const url = raw.trim().replace(/^["']|["']$/g, "").replace(/^mysql:\/\//, "mariadb://");
+  const host = process.env.DB_HOST;
+  const port = process.env.DB_PORT ?? "3306";
+  const user = process.env.DB_USER;
+  const pass = process.env.DB_PASS;
+  const name = process.env.DB_NAME;
+  if (!host || !user || !pass || !name) {
+    throw new Error("Faltan variables de BD: DB_HOST, DB_USER, DB_PASS o DB_NAME");
+  }
+  const url = `mariadb://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${host}:${port}/${name}`;
   return new PrismaMariaDb(url);
 }
 
