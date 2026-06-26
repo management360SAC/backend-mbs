@@ -1,23 +1,21 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { TenantDataSourceService } from "../../tenant/tenant-datasource.service";
 import { Contact } from "./Contact";
 import { CreateContactDto } from "./dto/create-contact.dto";
 import { UpdateContactDto } from "./dto/update-contact.dto";
 
 @Injectable()
 export class ContactsService {
-  constructor(
-    @InjectRepository(Contact) private readonly repo: Repository<Contact>
-  ) {}
+  constructor(private readonly tds: TenantDataSourceService) {}
 
-  create(dto: CreateContactDto) {
-    return this.repo.save(this.repo.create(dto));
+  async create(dto: CreateContactDto) {
+    const repo = await this.tds.getRepository(Contact);
+    return repo.save(repo.create(dto));
   }
 
-// contacts.service.ts
   async findAll(filters?: { type?: string; q?: string; status?: string; source_id?: number }) {
-    const qb = this.repo.createQueryBuilder("c");
+    const repo = await this.tds.getRepository(Contact);
+    const qb = repo.createQueryBuilder("c");
 
     if (filters?.type) qb.andWhere("c.type = :type", { type: filters.type });
     if (filters?.status) qb.andWhere("c.status = :status", { status: filters.status });
@@ -34,22 +32,24 @@ export class ContactsService {
     return qb.getMany();
   }
 
-
   async findOne(id: number) {
-    const e = await this.repo.findOne({ where: { id } });
+    const repo = await this.tds.getRepository(Contact);
+    const e = await repo.findOne({ where: { id } });
     if (!e) throw new NotFoundException("Contacto no encontrado");
     return e;
   }
 
   async update(id: number, dto: UpdateContactDto) {
+    const repo = await this.tds.getRepository(Contact);
     const e = await this.findOne(id);
     Object.assign(e, dto);
-    return this.repo.save(e);
+    return repo.save(e);
   }
 
   async remove(id: number) {
+    const repo = await this.tds.getRepository(Contact);
     const e = await this.findOne(id);
-    await this.repo.remove(e);
+    await repo.remove(e);
     return { ok: true };
   }
 }

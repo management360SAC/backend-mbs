@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { DataSource, DeepPartial, Repository } from "typeorm";
-
+import { DeepPartial } from "typeorm";
+import { TenantDataSourceService } from "../../tenant/tenant-datasource.service";
 import { Deal } from "../../marketing/deals/Deal";
 import { CreateDealDto } from "./dto/create-deal.dto";
 import { UpdateDealDto } from "./dto/update-deal.dto";
@@ -10,21 +9,15 @@ import { DealStageHistory } from "../deal-stage-history/DealStageHistory";
 
 @Injectable()
 export class DealsService {
-  constructor(
-    @InjectRepository(Deal)
-    private readonly repo: Repository<Deal>,
+  constructor(private readonly tds: TenantDataSourceService) {}
 
-    @InjectRepository(FunnelStage)
-    private readonly stagesRepo: Repository<FunnelStage>,
-
-    private readonly dataSource: DataSource,
-  ) {}
   async list(params: { page?: number; pageSize?: number }) {
     const page = params.page ?? 1;
     const pageSize = params.pageSize ?? 20;
     const skip = (page - 1) * pageSize;
 
-    const [items, total] = await this.repo.findAndCount({
+    const repo = await this.tds.getRepository(Deal);
+    const [items, total] = await repo.findAndCount({
       relations: ["contact", "campaign", "stage", "owner", "creator"],
       skip,
       take: pageSize,
@@ -35,7 +28,8 @@ export class DealsService {
   }
 
   async get(id: string) {
-    const deal = await this.repo.findOne({
+    const repo = await this.tds.getRepository(Deal);
+    const deal = await repo.findOne({
       where: { id } as any,
       relations: ["contact", "campaign", "stage", "owner", "creator"],
     });
@@ -45,25 +39,20 @@ export class DealsService {
   }
 
   async create(dto: CreateDealDto) {
-    // ✅ si viene stageId, validar existe
     const stageId = (dto as any).stageId;
     if (stageId !== undefined && stageId !== null) {
-      const st = await this.stagesRepo.findOne({
-        where: { id: String(stageId) } as any,
-      });
+      const stageRepo = await this.tds.getRepository(FunnelStage);
+      const st = await stageRepo.findOne({ where: { id: String(stageId) } as any });
       if (!st) throw new NotFoundException("Stage no existe");
     }
 
-    // ✅ MAPEO: convierte number -> string (bigint)
+    const repo = await this.tds.getRepository(Deal);
     const payload: DeepPartial<Deal> = {
-      // FK
       contactId: dto.contactId !== undefined && dto.contactId !== null ? String(dto.contactId) : undefined,
       campaignId: (dto as any).campaignId !== undefined && (dto as any).campaignId !== null ? String((dto as any).campaignId) : null,
       stageId: stageId !== undefined && stageId !== null ? String(stageId) : undefined,
       ownerUserId: (dto as any).ownerUserId !== undefined && (dto as any).ownerUserId !== null ? String((dto as any).ownerUserId) : null,
       createdBy: (dto as any).createdBy !== undefined && (dto as any).createdBy !== null ? String((dto as any).createdBy) : undefined,
-
-      // data
       title: (dto as any).title,
       amount: (dto as any).amount !== undefined && (dto as any).amount !== null ? String((dto as any).amount) : "0",
       currency: (dto as any).currency ?? "PEN",
@@ -73,32 +62,28 @@ export class DealsService {
       lostReason: (dto as any).lostReason ?? null,
     };
 
-    const entity = this.repo.create(payload);
-    const saved = await this.repo.save(entity);
-
+    const entity = repo.create(payload);
+    const saved = await repo.save(entity);
     return this.get(String(saved.id));
   }
 
   async update(id: string, dto: UpdateDealDto) {
     await this.get(id);
 
-    // si te mandan stageId por update normal, mejor forzar que usen changeStage
     if ((dto as any).stageId) {
       throw new BadRequestException("Para cambiar de etapa usa el endpoint de changeStage.");
     }
 
-    // ✅ opcional: si también tienes ids en update dto como number, conviene mapear igual
-    await this.repo.update({ id } as any, dto as any);
+    const repo = await this.tds.getRepository(Deal);
+    await repo.update({ id } as any, dto as any);
     return this.get(id);
   }
 
-  /**
-   * Cambia la etapa del deal y registra historial en mk_deal_stage_history
-   */
   async changeStage(params: { dealId: string; toStageId: string; changedById?: string | null }) {
     const { dealId, toStageId, changedById = null } = params;
+    const ds = await this.tds.getDataSource();
 
-    return this.dataSource.transaction(async (manager) => {
+    return ds.transaction(async (manager) => {
       const dealRepo = manager.getRepository(Deal);
       const stageRepo = manager.getRepository(FunnelStage);
       const historyRepo = manager.getRepository(DealStageHistory);

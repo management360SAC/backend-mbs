@@ -25,23 +25,23 @@ export class Deal {
      FK COLUMNS
      ====================== */
 
-  @Column({ name: "contact_id", type: "bigint" })
+  @Column({ name: "contact_id", type: "int" })
   @Index()
   contactId: string;
 
-  @Column({ name: "campaign_id", type: "bigint", nullable: true })
+  @Column({ name: "campaign_id", type: "int", nullable: true })
   @Index()
   campaignId: string | null;
 
-  @Column({ name: "stage_id", type: "bigint" })
+  @Column({ name: "stage_id", type: "int" })
   @Index()
   stageId: string;
 
-  @Column({ name: "owner_user_id", type: "bigint", nullable: true })
+  @Column({ name: "owner_user_id", type: "bigint", unsigned: true, nullable: true })
   @Index()
   ownerUserId: string | null;
 
-  @Column({ name: "created_by", type: "bigint" })
+  @Column({ name: "created_by", type: "bigint", unsigned: true })
   @Index()
   createdBy: string;
 

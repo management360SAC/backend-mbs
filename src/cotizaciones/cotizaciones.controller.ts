@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  Header,
   Param,
   Patch,
   Post,
@@ -13,9 +12,6 @@ import {
 } from "@nestjs/common";
 import type { Response } from "express";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
-import { EmpresaConfig } from "../empresa-config/EmpresaConfig";
 import { CotizacionesService } from "./cotizaciones.service";
 import { CreateCotizacionDto } from "./dto/create-cotizacion.dto";
 import { CambiarEstadoDto, UpdateCotizacionDto } from "./dto/update-cotizacion.dto";
@@ -24,11 +20,7 @@ import { SendCotizacionDto } from "./dto/send-cotizacion.dto";
 @UseGuards(JwtAuthGuard)
 @Controller("cotizaciones")
 export class CotizacionesController {
-  constructor(
-    private readonly service: CotizacionesService,
-    @InjectRepository(EmpresaConfig)
-    private readonly empresaRepo: Repository<EmpresaConfig>,
-  ) {}
+  constructor(private readonly service: CotizacionesService) {}
 
   @Post()
   create(@Body() dto: CreateCotizacionDto) {
@@ -75,7 +67,7 @@ export class CotizacionesController {
   @Get(":id/pdf")
   async getPdf(@Param("id") id: string, @Res() res: Response) {
     try {
-      const buffer = await this.service.generatePdf(Number(id), this.empresaRepo);
+      const buffer = await this.service.generatePdf(Number(id));
       res.set({
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="cotizacion-${id}.pdf"`,
@@ -89,7 +81,7 @@ export class CotizacionesController {
 
   @Post(":id/enviar")
   enviar(@Param("id") id: string, @Body() dto: SendCotizacionDto) {
-    return this.service.enviar(Number(id), dto, this.empresaRepo);
+    return this.service.enviar(Number(id), dto);
   }
 
   @Get(":id/envios")

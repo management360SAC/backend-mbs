@@ -1,6 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { TenantDataSourceService } from "../tenant/tenant-datasource.service";
 import { Lead } from "../marketing/leads/Lead";
 import { LeadSource } from "../marketing/lead-sources/LeadSource";
 import { LeadStage } from "../marketing/lead-stages/LeadStages";
@@ -21,22 +20,11 @@ interface FbLeadgenResponse {
 export class FacebookLeadsService {
   private readonly logger = new Logger(FacebookLeadsService.name);
 
-  constructor(
-    @InjectRepository(Lead)
-    private readonly leadsRepo: Repository<Lead>,
-
-    @InjectRepository(LeadSource)
-    private readonly sourcesRepo: Repository<LeadSource>,
-
-    @InjectRepository(LeadStage)
-    private readonly stagesRepo: Repository<LeadStage>,
-
-    @InjectRepository(EmpresaConfig)
-    private readonly configRepo: Repository<EmpresaConfig>,
-  ) {}
+  constructor(private readonly tds: TenantDataSourceService) {}
 
   async getConfig(): Promise<EmpresaConfig | null> {
-    return this.configRepo.findOne({ where: { id: 1 } });
+    const repo = await this.tds.getRepository(EmpresaConfig);
+    return repo.findOne({ where: { id: 1 } });
   }
 
   async processLeadgenId(leadgenId: string): Promise<void> {
@@ -85,7 +73,8 @@ export class FacebookLeadsService {
       return;
     }
 
-    const lead = this.leadsRepo.create({
+    const repo = await this.tds.getRepository(Lead);
+    const lead = repo.create({
       fullName,
       email: email ?? null,
       phone: phone ?? null,
@@ -94,21 +83,23 @@ export class FacebookLeadsService {
       currentStage: stage,
     } as any);
 
-    await this.leadsRepo.save(lead);
+    await repo.save(lead);
     this.logger.log(`Lead creado: ${fullName} (leadgen_id: ${leadgenId})`);
   }
 
   private async getOrCreateFacebookSource(): Promise<LeadSource> {
-    let source = await this.sourcesRepo.findOne({ where: { name: "Facebook Ads" } });
+    const repo = await this.tds.getRepository(LeadSource);
+    let source = await repo.findOne({ where: { name: "Facebook Ads" } });
     if (!source) {
-      source = this.sourcesRepo.create({ name: "Facebook Ads", channel: "facebook" });
-      await this.sourcesRepo.save(source);
+      source = repo.create({ name: "Facebook Ads", channel: "facebook" });
+      await repo.save(source);
     }
     return source;
   }
 
   private async getFirstStage(): Promise<LeadStage | null> {
-    return this.stagesRepo.findOne({
+    const repo = await this.tds.getRepository(LeadStage);
+    return repo.findOne({
       where: { isActive: true, isFinal: false },
       order: { order: "ASC" },
     });

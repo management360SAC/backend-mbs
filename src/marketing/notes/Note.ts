@@ -21,7 +21,7 @@ export class Note {
      FK COLUMNS
      ====================== */
 
-  @Column({ name: "contact_id", type: "bigint", nullable: true })
+  @Column({ name: "contact_id", type: "int", nullable: true })
   @Index()
   contactId: string | null;
 
@@ -29,7 +29,7 @@ export class Note {
   @Index()
   dealId: string | null;
 
-  @Column({ name: "created_by", type: "bigint" })
+  @Column({ name: "created_by", type: "bigint", unsigned: true })
   @Index()
   createdBy: string;
 

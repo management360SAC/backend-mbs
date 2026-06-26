@@ -1,39 +1,41 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { TenantDataSourceService } from "../../tenant/tenant-datasource.service";
 import { LeadSource } from "./LeadSource";
 import { CreateLeadSourceDto } from "./dto/create-lead-source.dto";
 import { UpdateLeadSourceDto } from "./dto/update-lead-source.dto";
 
 @Injectable()
 export class LeadSourcesService {
-  constructor(
-    @InjectRepository(LeadSource) private readonly repo: Repository<LeadSource>
-  ) {}
+  constructor(private readonly tds: TenantDataSourceService) {}
 
-  create(dto: CreateLeadSourceDto) {
-    return this.repo.save(this.repo.create(dto));
+  async create(dto: CreateLeadSourceDto) {
+    const repo = await this.tds.getRepository(LeadSource);
+    return repo.save(repo.create(dto));
   }
 
-  findAll() {
-    return this.repo.find({ order: { id: "DESC" } });
+  async findAll() {
+    const repo = await this.tds.getRepository(LeadSource);
+    return repo.find({ order: { id: "DESC" } });
   }
 
   async findOne(id: number) {
-    const e = await this.repo.findOne({ where: { id } });
+    const repo = await this.tds.getRepository(LeadSource);
+    const e = await repo.findOne({ where: { id } });
     if (!e) throw new NotFoundException("LeadSource no encontrado");
     return e;
   }
 
   async update(id: number, dto: UpdateLeadSourceDto) {
+    const repo = await this.tds.getRepository(LeadSource);
     const e = await this.findOne(id);
     Object.assign(e, dto);
-    return this.repo.save(e);
+    return repo.save(e);
   }
 
   async remove(id: number) {
+    const repo = await this.tds.getRepository(LeadSource);
     const e = await this.findOne(id);
-    await this.repo.remove(e);
+    await repo.remove(e);
     return { ok: true };
   }
 }

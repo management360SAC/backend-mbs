@@ -12,10 +12,10 @@ import { FunnelStage } from "../funnel-stages/FunnelStage";
 /** Relación many-to-many entre Campaña y Etapas del Embudo de Ventas */
 @Entity({ name: "mk_campaign_funnels" })
 export class CampaignFunnel {
-  @PrimaryColumn({ type: "bigint", unsigned: true })
+  @PrimaryColumn({ type: "int" })
   campaign_id: number;
 
-  @PrimaryColumn({ type: "bigint", unsigned: true })
+  @PrimaryColumn({ type: "int" })
   funnel_stage_id: number;
 
   @CreateDateColumn()

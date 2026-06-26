@@ -7,7 +7,7 @@ async function bootstrap() {
     exclude: ["facebook/webhook"],
   });
   app.enableCors({
-    origin: ["https://crm.mbs.pe", "http://localhost:5174", "http://localhost:5175", "http://localhost:5173"],
+    origin: ["https://crm.mbs.pe", "https://crmbackend.mbs.pe", "http://localhost:5174", "http://localhost:5175", "http://localhost:5173"],
     credentials: true,
   });
   app.useGlobalPipes(

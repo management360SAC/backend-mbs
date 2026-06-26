@@ -20,11 +20,11 @@ export class Touchpoint {
      FK COLUMNS
      ====================== */
 
-  @Column({ name: "contact_id", type: "bigint" })
+  @Column({ name: "contact_id", type: "int" })
   @Index()
   contactId: string;
 
-  @Column({ name: "campaign_id", type: "bigint", nullable: true })
+  @Column({ name: "campaign_id", type: "int", nullable: true })
   @Index()
   campaignId: string | null;
 

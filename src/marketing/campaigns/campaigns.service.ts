@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { In, Repository } from "typeorm";
+import { In } from "typeorm";
+import { TenantDataSourceService } from "../../tenant/tenant-datasource.service";
 import { Campaign } from "./Campaign";
 import { CampaignFunnel } from "./CampaignFunnel";
 import { CampaignSend } from "./CampaignSend";
@@ -12,26 +12,23 @@ import { EmailService } from "../../cotizaciones/email.service";
 @Injectable()
 export class CampaignsService {
   constructor(
-    @InjectRepository(Campaign)
-    private readonly repo: Repository<Campaign>,
-    @InjectRepository(CampaignFunnel)
-    private readonly funnelRepo: Repository<CampaignFunnel>,
-    @InjectRepository(CampaignSend)
-    private readonly sendRepo: Repository<CampaignSend>,
+    private readonly tds: TenantDataSourceService,
     private readonly emailService: EmailService,
   ) {}
 
   // ─── CRUD ─────────────────────────────────────────────────────────────────
 
-  create(dto: CreateCampaignDto): Promise<Campaign> {
+  async create(dto: CreateCampaignDto): Promise<Campaign> {
+    const repo = await this.tds.getRepository(Campaign);
     const data: Partial<Campaign> = { ...dto, type: (dto.type ?? "EMAIL") as Campaign["type"] };
-    const entity = this.repo.create(data);
+    const entity = repo.create(data);
     if (data.type === "EMAIL") entity.channel = "email";
-    return this.repo.save(entity);
+    return repo.save(entity);
   }
 
-  findAll(filters?: { type?: string; status?: string; q?: string }) {
-    const qb = this.repo.createQueryBuilder("c").orderBy("c.id", "DESC");
+  async findAll(filters?: { type?: string; status?: string; q?: string }) {
+    const repo = await this.tds.getRepository(Campaign);
+    const qb = repo.createQueryBuilder("c").orderBy("c.id", "DESC");
     if (filters?.type)   qb.andWhere("c.type = :type",     { type: filters.type });
     if (filters?.status) qb.andWhere("c.status = :status", { status: filters.status });
     if (filters?.q) {
@@ -41,12 +38,14 @@ export class CampaignsService {
   }
 
   async findOne(id: number) {
-    const entity = await this.repo.findOne({ where: { id } });
+    const repo = await this.tds.getRepository(Campaign);
+    const entity = await repo.findOne({ where: { id } });
     if (!entity) throw new NotFoundException("Campaña no encontrada");
     return entity;
   }
 
   async update(id: number, dto: UpdateCampaignDto): Promise<Campaign> {
+    const repo = await this.tds.getRepository(Campaign);
     const entity = await this.findOne(id);
     if (dto.type) entity.type = dto.type as Campaign["type"];
     if (dto.name        !== undefined) entity.name        = dto.name!;
@@ -60,20 +59,22 @@ export class CampaignsService {
     if (dto.end_date    !== undefined) entity.end_date    = dto.end_date ?? null;
     if (dto.budget      !== undefined) entity.budget      = dto.budget ?? null;
     if (entity.type === "EMAIL")       entity.channel     = "email";
-    return this.repo.save(entity);
+    return repo.save(entity);
   }
 
   async remove(id: number) {
+    const repo = await this.tds.getRepository(Campaign);
     const entity = await this.findOne(id);
-    await this.repo.remove(entity);
+    await repo.remove(entity);
     return { ok: true };
   }
 
   // ─── Funnel stages (many-to-many) ─────────────────────────────────────────
 
   async getFunnelStages(campaignId: number) {
-    await this.findOne(campaignId); // valida existencia
-    const rows = await this.funnelRepo.find({
+    await this.findOne(campaignId);
+    const funnelRepo = await this.tds.getRepository(CampaignFunnel);
+    const rows = await funnelRepo.find({
       where: { campaign_id: campaignId },
       relations: ["funnel_stage"],
       order: { created_at: "ASC" },
@@ -83,13 +84,13 @@ export class CampaignsService {
 
   async setFunnelStages(campaignId: number, stageIds: number[]) {
     await this.findOne(campaignId);
-    // Reemplazar todas las asociaciones
-    await this.funnelRepo.delete({ campaign_id: campaignId });
+    const funnelRepo = await this.tds.getRepository(CampaignFunnel);
+    await funnelRepo.delete({ campaign_id: campaignId });
     if (stageIds.length === 0) return [];
     const rows = stageIds.map((sid) =>
-      this.funnelRepo.create({ campaign_id: campaignId, funnel_stage_id: sid }),
+      funnelRepo.create({ campaign_id: campaignId, funnel_stage_id: sid }),
     );
-    await this.funnelRepo.save(rows);
+    await funnelRepo.save(rows);
     return this.getFunnelStages(campaignId);
   }
 
@@ -97,26 +98,25 @@ export class CampaignsService {
 
   async getStats(campaignId: number) {
     await this.findOne(campaignId);
+    const repo = await this.tds.getRepository(Campaign);
+    const funnelRepo = await this.tds.getRepository(CampaignFunnel);
 
     const [dealsRows, sendRows, funnelRows] = await Promise.all([
-      // Cierres de ventas por estado
-      this.repo.query(
+      repo.query(
         `SELECT status, COUNT(*) AS total, COALESCE(SUM(amount), 0) AS amount
          FROM mk_deals
          WHERE campaign_id = ?
          GROUP BY status`,
         [campaignId],
       ),
-      // Envíos de email
-      this.repo.query(
+      repo.query(
         `SELECT status, COUNT(*) AS total
          FROM mk_campaign_sends
          WHERE campaign_id = ?
          GROUP BY status`,
         [campaignId],
       ),
-      // Etapas del embudo asociadas
-      this.funnelRepo.find({
+      funnelRepo.find({
         where: { campaign_id: campaignId },
         relations: ["funnel_stage"],
       }),
@@ -127,9 +127,7 @@ export class CampaignsService {
       won: Number(dealsRows.find((r: any) => r.status === "won")?.total ?? 0),
       lost: Number(dealsRows.find((r: any) => r.status === "lost")?.total ?? 0),
       open: Number(dealsRows.find((r: any) => r.status === "open")?.total ?? 0),
-      revenue: Number(
-        dealsRows.find((r: any) => r.status === "won")?.amount ?? 0,
-      ),
+      revenue: Number(dealsRows.find((r: any) => r.status === "won")?.amount ?? 0),
     };
 
     const sends = {
@@ -164,9 +162,10 @@ export class CampaignsService {
       throw new BadRequestException("La campaña debe tener un contenido (body)");
     }
 
-    const empresaRows = await this.repo.query(
-      "SELECT * FROM empresa_config WHERE id = 1 LIMIT 1",
-    );
+    const repo = await this.tds.getRepository(Campaign);
+    const sendRepo = await this.tds.getRepository(CampaignSend);
+
+    const empresaRows = await repo.query("SELECT * FROM empresa_config WHERE id = 1 LIMIT 1");
     const empresa = empresaRows?.[0] ?? null;
 
     const smtpConfig = empresa?.smtp_host
@@ -194,7 +193,7 @@ export class CampaignsService {
       }
     }
 
-    const contacts: any[] = await this.repo.query(sql, params);
+    const contacts: any[] = await repo.query(sql, params);
 
     let sent = 0;
     let failed = 0;
@@ -215,7 +214,7 @@ export class CampaignsService {
         html,
       });
 
-      const send = this.sendRepo.create({
+      const send = sendRepo.create({
         campaign_id: id,
         contact_id: contact.id ?? null,
         contact_email: contact.email,
@@ -223,7 +222,7 @@ export class CampaignsService {
         status: result.ok ? "sent" : "failed",
         error_msg: result.error ?? null,
       });
-      await this.sendRepo.save(send);
+      await sendRepo.save(send);
 
       if (result.ok) {
         sent++;
@@ -235,14 +234,15 @@ export class CampaignsService {
 
     if (campaign.status === "draft" && sent > 0) {
       campaign.status = "active";
-      await this.repo.save(campaign);
+      await repo.save(campaign);
     }
 
     return { sent, failed, total: contacts.length, errors };
   }
 
-  getSends(campaignId: number): Promise<CampaignSend[]> {
-    return this.sendRepo.find({
+  async getSends(campaignId: number): Promise<CampaignSend[]> {
+    const sendRepo = await this.tds.getRepository(CampaignSend);
+    return sendRepo.find({
       where: { campaign_id: campaignId },
       order: { sent_at: "DESC" },
     });

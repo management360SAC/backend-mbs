@@ -1,19 +1,16 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { TenantDataSourceService } from "../tenant/tenant-datasource.service";
 import { EduPayment } from "./EduPayment";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
 import { UpdatePaymentDto } from "./dto/update-payment.dto";
 
 @Injectable()
 export class PaymentsService {
-  constructor(
-    @InjectRepository(EduPayment)
-    private readonly repo: Repository<EduPayment>,
-  ) {}
+  constructor(private readonly tds: TenantDataSourceService) {}
 
   async findAll(params?: { contact_id?: number; course_id?: number }) {
-    const qb = this.repo
+    const repo = await this.tds.getRepository(EduPayment);
+    const qb = repo
       .createQueryBuilder("p")
       .leftJoin("mk_contacts", "c", "c.id = p.contact_id")
       .leftJoin("edu_courses", "ec", "ec.id = p.course_id")
@@ -29,14 +26,16 @@ export class PaymentsService {
   }
 
   async findOne(id: number) {
-    const p = await this.repo.findOne({ where: { id } });
+    const repo = await this.tds.getRepository(EduPayment);
+    const p = await repo.findOne({ where: { id } });
     if (!p) throw new NotFoundException(`Pago ${id} no encontrado`);
     return this.serialize(p);
   }
 
   async create(dto: CreatePaymentDto) {
+    const repo = await this.tds.getRepository(EduPayment);
     const note = dto.note ?? dto.notes ?? null;
-    const payment = this.repo.create({
+    const payment = repo.create({
       contactId: dto.contact_id,
       courseId: dto.course_id,
       enrollmentId: dto.enrollment_id ?? null,
@@ -47,12 +46,13 @@ export class PaymentsService {
       paymentDate: dto.payment_date,
       note,
     });
-    const saved = await this.repo.save(payment);
+    const saved = await repo.save(payment);
     return this.serialize(saved);
   }
 
   async update(id: number, dto: UpdatePaymentDto) {
-    const payment = await this.repo.findOne({ where: { id } });
+    const repo = await this.tds.getRepository(EduPayment);
+    const payment = await repo.findOne({ where: { id } });
     if (!payment) throw new NotFoundException(`Pago ${id} no encontrado`);
 
     if (dto.contact_id !== undefined) payment.contactId = dto.contact_id;
@@ -66,14 +66,15 @@ export class PaymentsService {
     if (dto.note !== undefined || dto.notes !== undefined)
       payment.note = dto.note ?? dto.notes ?? null;
 
-    const saved = await this.repo.save(payment);
+    const saved = await repo.save(payment);
     return this.serialize(saved);
   }
 
   async remove(id: number) {
-    const payment = await this.repo.findOne({ where: { id } });
+    const repo = await this.tds.getRepository(EduPayment);
+    const payment = await repo.findOne({ where: { id } });
     if (!payment) throw new NotFoundException(`Pago ${id} no encontrado`);
-    await this.repo.remove(payment);
+    await repo.remove(payment);
     return { ok: true };
   }
 

@@ -21,7 +21,7 @@ export class DealStageHistory {
      FK COLUMNS
      ====================== */
 
-  @Column({ name: "deal_id", type: "int" })
+  @Column({ name: "deal_id", type: "bigint" })
   @Index()
   deal_id: number;
 
@@ -33,7 +33,7 @@ export class DealStageHistory {
   @Index()
   to_stage_id: number;
 
-  @Column({ name: "changed_by", type: "int", nullable: true })
+  @Column({ name: "changed_by", type: "bigint", unsigned: true, nullable: true })
   changed_by_id: number | null;
 
   /* ======================

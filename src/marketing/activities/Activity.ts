@@ -31,14 +31,14 @@ export class Activity {
   @JoinColumn({ name: "deal_id" })
   deal?: Deal;
 
-  @Column({ name: "deal_id", type: "int", nullable: true })
+  @Column({ name: "deal_id", type: "bigint", nullable: true })
   dealId?: number;
 
   @ManyToOne(() => User, { nullable: false })
   @JoinColumn({ name: "assigned_to" })
   assignedUser: User;
 
-  @Column({ name: "assigned_to", type: "int" })
+  @Column({ name: "assigned_to", type: "bigint", unsigned: true })
   assignedTo: number;
 
   /* =====================

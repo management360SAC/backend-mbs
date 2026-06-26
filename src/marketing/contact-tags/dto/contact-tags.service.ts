@@ -1,25 +1,24 @@
 import { Injectable } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { TenantDataSourceService } from "../../../tenant/tenant-datasource.service";
 import { ContactTag } from "../ContactTag";
 
 @Injectable()
 export class ContactTagsService {
-  constructor(
-    @InjectRepository(ContactTag)
-    private readonly repo: Repository<ContactTag>,
-  ) {}
+  constructor(private readonly tds: TenantDataSourceService) {}
 
-  attach(contactId: number, tagId: number) {
-    return this.repo.save({ contactId, tagId });
+  async attach(contactId: number, tagId: number) {
+    const repo = await this.tds.getRepository(ContactTag);
+    return repo.save({ contactId, tagId });
   }
 
-  detach(contactId: number, tagId: number) {
-    return this.repo.delete({ contactId, tagId });
+  async detach(contactId: number, tagId: number) {
+    const repo = await this.tds.getRepository(ContactTag);
+    return repo.delete({ contactId, tagId });
   }
 
-  findByContact(contactId: number) {
-    return this.repo.find({
+  async findByContact(contactId: number) {
+    const repo = await this.tds.getRepository(ContactTag);
+    return repo.find({
       where: { contactId },
       relations: ["tag"],
     });

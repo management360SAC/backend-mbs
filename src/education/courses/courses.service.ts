@@ -1,23 +1,20 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { TenantDataSourceService } from "../../tenant/tenant-datasource.service";
 import { Course } from "../courses/Course";
 import { CreateCourseDto } from "./dto/create-course.dto";
 import { UpdateCourseDto } from "./dto/update-course.dto";
 
 @Injectable()
 export class CoursesService {
-  constructor(
-    @InjectRepository(Course)
-    private readonly repo: Repository<Course>,
-  ) {}
+  constructor(private readonly tds: TenantDataSourceService) {}
 
   async list(params: { page?: number; pageSize?: number }) {
     const page = params.page ?? 1;
     const pageSize = params.pageSize ?? 20;
     const skip = (page - 1) * pageSize;
 
-    const [items, total] = await this.repo.findAndCount({
+    const repo = await this.tds.getRepository(Course);
+    const [items, total] = await repo.findAndCount({
       where: { isActive: true },
       skip,
       take: pageSize,
@@ -28,18 +25,21 @@ export class CoursesService {
   }
 
   async get(id: number) {
-    const course = await this.repo.findOne({ where: { id } });
+    const repo = await this.tds.getRepository(Course);
+    const course = await repo.findOne({ where: { id } });
     if (!course) throw new NotFoundException("Curso no existe");
     return course;
   }
 
   async create(dto: CreateCourseDto) {
-    const course = this.repo.create(dto);
-    await this.repo.save(course);
+    const repo = await this.tds.getRepository(Course);
+    const course = repo.create(dto);
+    await repo.save(course);
     return course;
   }
 
   async update(id: number, dto: UpdateCourseDto) {
+    const repo = await this.tds.getRepository(Course);
     await this.get(id);
     const patch: Partial<Course> = {};
     if (dto.code       !== undefined) patch.code           = dto.code;
@@ -49,13 +49,14 @@ export class CoursesService {
     if (dto.currency   !== undefined) patch.currency       = dto.currency;
     if (dto.is_active  !== undefined) patch.isActive       = dto.is_active;
     if (dto.moodle_course_id !== undefined) patch.moodleCourseId = dto.moodle_course_id ?? null;
-    await this.repo.update({ id }, patch);
+    await repo.update({ id }, patch);
     return this.get(id);
   }
 
   async remove(id: number) {
+    const repo = await this.tds.getRepository(Course);
     const course = await this.get(id);
-    await this.repo.remove(course);
+    await repo.remove(course);
     return { ok: true };
   }
 }

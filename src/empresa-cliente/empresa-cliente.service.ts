@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { TenantDataSourceService } from "../tenant/tenant-datasource.service";
 import { EmpresaCliente } from "./EmpresaCliente";
 import { EmpresaContacto } from "./EmpresaContacto";
 import { CreateEmpresaClienteDto } from "./dto/create-empresa-cliente.dto";
@@ -8,12 +7,7 @@ import { CreateEmpresaContactoDto } from "./dto/create-empresa-contacto.dto";
 
 @Injectable()
 export class EmpresaClienteService {
-  constructor(
-    @InjectRepository(EmpresaCliente)
-    private readonly empresaRepo: Repository<EmpresaCliente>,
-    @InjectRepository(EmpresaContacto)
-    private readonly contactoRepo: Repository<EmpresaContacto>,
-  ) {}
+  constructor(private readonly tds: TenantDataSourceService) {}
 
   // ── Empresas ──────────────────────────────────────────────────────────────
 
@@ -23,7 +17,8 @@ export class EmpresaClienteService {
     page = 1,
     limit = 10,
   ): Promise<{ data: EmpresaCliente[]; total: number; page: number; totalPages: number }> {
-    const qb = this.empresaRepo.createQueryBuilder("e");
+    const repo = await this.tds.getRepository(EmpresaCliente);
+    const qb = repo.createQueryBuilder("e");
     if (type) {
       qb.where("e.type = :type", { type });
     }
@@ -38,13 +33,15 @@ export class EmpresaClienteService {
   }
 
   async findOneEmpresa(id: number): Promise<EmpresaCliente> {
-    const e = await this.empresaRepo.findOne({ where: { id } });
+    const repo = await this.tds.getRepository(EmpresaCliente);
+    const e = await repo.findOne({ where: { id } });
     if (!e) throw new NotFoundException("Empresa no encontrada");
     return e;
   }
 
   async createEmpresa(dto: CreateEmpresaClienteDto): Promise<EmpresaCliente> {
-    const e = this.empresaRepo.create({
+    const repo = await this.tds.getRepository(EmpresaCliente);
+    const e = repo.create({
       type: dto.type ?? "empresa",
       razon_social: dto.razon_social ?? null,
       nombre_comercial: dto.nombre_comercial ?? null,
@@ -57,25 +54,28 @@ export class EmpresaClienteService {
       estado: dto.estado ?? "activo",
       observaciones: dto.observaciones ?? null,
     });
-    return this.empresaRepo.save(e);
+    return repo.save(e);
   }
 
   async updateEmpresa(id: number, dto: Partial<CreateEmpresaClienteDto>): Promise<EmpresaCliente> {
+    const repo = await this.tds.getRepository(EmpresaCliente);
     const e = await this.findOneEmpresa(id);
     Object.assign(e, dto);
-    return this.empresaRepo.save(e);
+    return repo.save(e);
   }
 
   async removeEmpresa(id: number): Promise<{ ok: boolean }> {
+    const repo = await this.tds.getRepository(EmpresaCliente);
     const e = await this.findOneEmpresa(id);
-    await this.empresaRepo.remove(e);
+    await repo.remove(e);
     return { ok: true };
   }
 
   // ── Contactos de empresa ─────────────────────────────────────────────────
 
   async findContactosByEmpresa(empresaId: number): Promise<EmpresaContacto[]> {
-    return this.contactoRepo.find({
+    const repo = await this.tds.getRepository(EmpresaContacto);
+    return repo.find({
       where: { empresa_id: empresaId },
       order: { is_principal: "DESC", nombres: "ASC" },
     });
@@ -83,7 +83,8 @@ export class EmpresaClienteService {
 
   async createContacto(dto: CreateEmpresaContactoDto): Promise<EmpresaContacto> {
     await this.findOneEmpresa(dto.empresa_id);
-    const c = this.contactoRepo.create({
+    const repo = await this.tds.getRepository(EmpresaContacto);
+    const c = repo.create({
       empresa_id: dto.empresa_id,
       nombres: dto.nombres,
       apellidos: dto.apellidos ?? null,
@@ -93,11 +94,12 @@ export class EmpresaClienteService {
       estado: dto.estado ?? "activo",
       is_principal: dto.is_principal ? 1 : 0,
     });
-    return this.contactoRepo.save(c);
+    return repo.save(c);
   }
 
   async updateContacto(id: number, dto: Partial<CreateEmpresaContactoDto>): Promise<EmpresaContacto> {
-    const c = await this.contactoRepo.findOne({ where: { id } });
+    const repo = await this.tds.getRepository(EmpresaContacto);
+    const c = await repo.findOne({ where: { id } });
     if (!c) throw new NotFoundException("Contacto no encontrado");
     if (dto.nombres !== undefined) c.nombres = dto.nombres;
     if (dto.apellidos !== undefined) c.apellidos = dto.apellidos ?? null;
@@ -106,13 +108,14 @@ export class EmpresaClienteService {
     if (dto.telefono !== undefined) c.telefono = dto.telefono ?? null;
     if (dto.estado !== undefined) c.estado = dto.estado ?? "activo";
     if (dto.is_principal !== undefined) c.is_principal = dto.is_principal ? 1 : 0;
-    return this.contactoRepo.save(c);
+    return repo.save(c);
   }
 
   async removeContacto(id: number): Promise<{ ok: boolean }> {
-    const c = await this.contactoRepo.findOne({ where: { id } });
+    const repo = await this.tds.getRepository(EmpresaContacto);
+    const c = await repo.findOne({ where: { id } });
     if (!c) throw new NotFoundException("Contacto no encontrado");
-    await this.contactoRepo.remove(c);
+    await repo.remove(c);
     return { ok: true };
   }
 }

@@ -1,17 +1,14 @@
 import { Injectable } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
-import { Consent } from "../../notes/consents/Consent"
+import { TenantDataSourceService } from "../../../tenant/tenant-datasource.service";
+import { Consent } from "../../notes/consents/Consent";
 
 @Injectable()
 export class ConsentsService {
-  constructor(
-    @InjectRepository(Consent)
-    private readonly repo: Repository<Consent>,
-  ) {}
+  constructor(private readonly tds: TenantDataSourceService) {}
 
-  grant(contactId: number, consentType: string) {
-    return this.repo.save({
+  async grant(contactId: number, consentType: string) {
+    const repo = await this.tds.getRepository(Consent);
+    return repo.save({
       contactId,
       consentType,
       granted: true,
@@ -20,17 +17,13 @@ export class ConsentsService {
     });
   }
 
-  revoke(id: number) {
-    return this.repo.update(
-      { id },
-      { granted: false, revokedAt: new Date() },
-    );
+  async revoke(id: number) {
+    const repo = await this.tds.getRepository(Consent);
+    return repo.update({ id }, { granted: false, revokedAt: new Date() });
   }
 
-  findByContact(contactId: number) {
-    return this.repo.find({
-      where: { contactId },
-      order: { createdAt: "DESC" },
-    });
+  async findByContact(contactId: number) {
+    const repo = await this.tds.getRepository(Consent);
+    return repo.find({ where: { contactId }, order: { createdAt: "DESC" } });
   }
 }

@@ -1,44 +1,40 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { TenantDataSourceService } from "../../tenant/tenant-datasource.service";
 import { LeadStage } from "../../marketing/lead-stages/LeadStages";
 import { CreateLeadStageDto } from "./dto/create-lead-stage.dto";
 import { UpdateLeadStageDto } from "./dto/update-lead-stage.dto";
 
 @Injectable()
 export class LeadStagesService {
-  constructor(
-    @InjectRepository(LeadStage)
-    private readonly repo: Repository<LeadStage>,
-  ) {}
+  constructor(private readonly tds: TenantDataSourceService) {}
 
-  findAll() {
-    return this.repo.find({
-      order: { order: "ASC" },
-    });
+  async findAll() {
+    const repo = await this.tds.getRepository(LeadStage);
+    return repo.find({ order: { order: "ASC" } });
   }
 
   async findOne(id: number) {
-    const stage = await this.repo.findOne({ where: { id } });
-    if (!stage) {
-      throw new NotFoundException("Stage no encontrado");
-    }
+    const repo = await this.tds.getRepository(LeadStage);
+    const stage = await repo.findOne({ where: { id } });
+    if (!stage) throw new NotFoundException("Stage no encontrado");
     return stage;
   }
 
-  create(dto: CreateLeadStageDto) {
-    const stage = this.repo.create(dto);
-    return this.repo.save(stage);
+  async create(dto: CreateLeadStageDto) {
+    const repo = await this.tds.getRepository(LeadStage);
+    return repo.save(repo.create(dto));
   }
 
   async update(id: number, dto: UpdateLeadStageDto) {
+    const repo = await this.tds.getRepository(LeadStage);
     const stage = await this.findOne(id);
     Object.assign(stage, dto);
-    return this.repo.save(stage);
+    return repo.save(stage);
   }
 
   async remove(id: number) {
+    const repo = await this.tds.getRepository(LeadStage);
     const stage = await this.findOne(id);
-    return this.repo.remove(stage);
+    return repo.remove(stage);
   }
 }

@@ -1,9 +1,9 @@
 import { Injectable } from "@nestjs/common";
-import { DataSource } from "typeorm";
+import { TenantDataSourceService } from "../tenant/tenant-datasource.service";
 
 @Injectable()
 export class ActivityLogsService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(private readonly tds: TenantDataSourceService) {}
 
   async getRecentActivity(params: {
     entity_type?: string;
@@ -15,7 +15,6 @@ export class ActivityLogsService {
     const offset = (page - 1) * limit;
     const et = params.entity_type;
 
-    // Build subqueries per entity type
     const subqueries: string[] = [];
 
     if (!et || et === "contact") {
@@ -67,20 +66,17 @@ export class ActivityLogsService {
     }
 
     const union = subqueries.map(q => `(${q})`).join("\nUNION ALL\n");
+    const ds = await this.tds.getDataSource();
 
-    // Count total
     let total = 0;
     try {
-      const countRows = await this.dataSource.query(
-        `SELECT COUNT(*) AS cnt FROM (${union}) AS _all`,
-      );
+      const countRows = await ds.query(`SELECT COUNT(*) AS cnt FROM (${union}) AS _all`);
       total = Number(countRows[0]?.cnt ?? 0);
     } catch { total = 0; }
 
-    // Fetch page
     let rows: any[] = [];
     try {
-      rows = await this.dataSource.query(
+      rows = await ds.query(
         `SELECT * FROM (${union}) AS _all ORDER BY created_at DESC LIMIT ? OFFSET ?`,
         [limit, offset],
       );
