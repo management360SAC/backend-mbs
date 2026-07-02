@@ -1,16 +1,20 @@
-import { Injectable, Logger, ConflictException, BadRequestException } from "@nestjs/common";
-import { DataSource } from "typeorm";
+import { Injectable, Logger, ConflictException, BadRequestException, NotFoundException } from "@nestjs/common";
+import { DataSource, In } from "typeorm";
 import * as bcrypt from "bcryptjs";
 import { PrismaService } from "../prisma/prisma.service";
 import { TENANT_ENTITIES } from "../tenant/tenant-entities";
 import { TenantDataSourceService } from "../tenant/tenant-datasource.service";
+import { TenantInfo } from "../tenant/tenant.context";
 import { User } from "../users/user.entity";
 import { Role } from "../roles/role.entity";
 import { RolePermission } from "../roles/role-permission.entity";
 import { Permission } from "../permissions/permission.entity";
 import { UserRole } from "../users/user-role.entity";
 import { LeadStage } from "../marketing/lead-stages/LeadStages";
+import { EmpresaConfig } from "../empresa-config/EmpresaConfig";
 import { CreateTenantDto } from "./dto/create-tenant.dto";
+import { CreateUserDto } from "../users/dto/users.dto";
+import { UpdateEmpresaConfigDto } from "../empresa-config/dto/update-empresa-config.dto";
 
 const DEFAULT_PERMISSIONS = [
   { code: "users.create",      module: "users",       action: "create",  description: "Crear usuarios" },
@@ -73,11 +77,11 @@ export class TenantProvisioningService {
       throw new ConflictException(`Ya existe un tenant con slug '${slug}' o db '${dbName}'`);
     }
 
-    const host = process.env.DB_HOST;
-    if (!host) throw new BadRequestException("DB_HOST no configurado");
-    const port = parseInt(process.env.DB_PORT ?? "3306");
-    const username = process.env.DB_USER ?? "crm";
-    const password = process.env.DB_PASS ?? "crm";
+    const adminUrl = process.env.DATABASE_ADMIN_URL;
+    if (!adminUrl) throw new BadRequestException("DATABASE_ADMIN_URL no configurada");
+
+    // Parse admin URL for host/port/user/pass
+    const { host, port, username, password } = this.parseUrl(adminUrl);
 
     // 1. Create the database using admin credentials
     const adminDs = new DataSource({
@@ -117,12 +121,99 @@ export class TenantProvisioningService {
     await schemaDs.destroy();
 
     // 4. Create tenant record in crm_master
+    let parentId: number | null = null;
+    if (dto.parentSlug) {
+      const parent = await this.prisma.tenant.findUnique({ where: { slug: dto.parentSlug } });
+      if (parent) parentId = parent.id;
+    }
+
     const tenant = await this.prisma.tenant.create({
-      data: { name: dto.name, slug, dbName, dbHost: host, dbPort: port, dbUser: "crm", dbPass: "crm", isActive: true },
+      data: { name: dto.name, slug, dbName, dbHost: host, dbPort: port, dbUser: "crm", dbPass: "crm", isActive: true, ...(parentId ? { parentId } : {}) },
     });
+
+    // 5. If has parent, copy parent roles to child (overrides defaults)
+    if (parentId && dto.parentSlug) {
+      await this.copyRolesFromParent(dto.parentSlug, schemaDs).catch((e) => this.logger.warn(`Could not copy parent roles: ${e.message}`));
+    }
 
     this.logger.log(`Tenant provisioned: ${slug} (id=${tenant.id})`);
     return tenant;
+  }
+
+  private async copyRolesFromParent(parentSlug: string, childDs: DataSource) {
+    const parentInfo = await this.resolveTenantInfo(parentSlug);
+    const parentRoleRepo = await this.tds.getRepository(Role, parentInfo);
+    const parentRpRepo = await this.tds.getRepository(RolePermission, parentInfo);
+    const parentPermRepo = await this.tds.getRepository(Permission, parentInfo);
+
+    const parentRoles = await parentRoleRepo.find({ relations: { rolePermissions: { permission: true } } });
+
+    const childRoleRepo = childDs.getRepository(Role);
+    const childPermRepo = childDs.getRepository(Permission);
+    const childRpRepo = childDs.getRepository(RolePermission);
+
+    for (const pr of parentRoles) {
+      let childRole = await childRoleRepo.findOne({ where: { code: pr.code } });
+      if (!childRole) {
+        childRole = await childRoleRepo.save(childRoleRepo.create({ code: pr.code, name: pr.name, description: pr.description, isSystem: pr.isSystem }));
+      } else {
+        await childRoleRepo.update({ id: childRole.id }, { name: pr.name, description: pr.description });
+        childRole = (await childRoleRepo.findOne({ where: { id: childRole.id } }))!;
+      }
+
+      // Sync permissions by code
+      const permCodes = (pr.rolePermissions ?? []).map((rp) => rp.permission?.code).filter(Boolean) as string[];
+      if (permCodes.length > 0) {
+        const childPerms = await childPermRepo.find({ where: { code: In(permCodes) } });
+        await childRpRepo.delete({ roleId: childRole.id });
+        for (const cp of childPerms) {
+          await childRpRepo.save(childRpRepo.create({ roleId: childRole.id, permissionId: cp.id }));
+        }
+      }
+    }
+    this.logger.log(`Roles copied from parent '${parentSlug}' to child`);
+  }
+
+  async syncRolesToChildren(parentSlug: string) {
+    const parentTenant = await this.prisma.tenant.findUnique({ where: { slug: parentSlug } });
+    if (!parentTenant) throw new NotFoundException(`Empresa '${parentSlug}' no encontrada`);
+
+    const children = await this.prisma.tenant.findMany({ where: { parentId: parentTenant.id } });
+    if (children.length === 0) return { synced: 0, message: "No hay empresas hijas" };
+
+    const parentInfo = await this.resolveTenantInfo(parentSlug);
+    const parentRoleRepo = await this.tds.getRepository(Role, parentInfo);
+    const parentRoles = await parentRoleRepo.find({ relations: { rolePermissions: { permission: true } } });
+
+    let synced = 0;
+    for (const child of children) {
+      const childInfo: TenantInfo = { id: child.id, slug: child.slug, dbName: child.dbName, dbHost: child.dbHost, dbPort: child.dbPort, dbUser: child.dbUser, dbPass: child.dbPass };
+      const childRoleRepo = await this.tds.getRepository(Role, childInfo);
+      const childPermRepo = await this.tds.getRepository(Permission, childInfo);
+      const childRpRepo = await this.tds.getRepository(RolePermission, childInfo);
+
+      for (const pr of parentRoles) {
+        let childRole = await childRoleRepo.findOne({ where: { code: pr.code } });
+        if (!childRole) {
+          childRole = await childRoleRepo.save(childRoleRepo.create({ code: pr.code, name: pr.name, description: pr.description, isSystem: pr.isSystem }));
+        } else {
+          await childRoleRepo.update({ id: childRole.id }, { name: pr.name, description: pr.description });
+          childRole = (await childRoleRepo.findOne({ where: { id: childRole.id } }))!;
+        }
+
+        const permCodes = (pr.rolePermissions ?? []).map((rp) => rp.permission?.code).filter(Boolean) as string[];
+        if (permCodes.length > 0) {
+          const childPerms = await childPermRepo.find({ where: { code: In(permCodes) } });
+          await childRpRepo.delete({ roleId: childRole.id });
+          for (const cp of childPerms) {
+            await childRpRepo.save(childRpRepo.create({ roleId: childRole.id, permissionId: cp.id }));
+          }
+        }
+      }
+      synced++;
+    }
+
+    return { synced, message: `Roles sincronizados a ${synced} empresa(s) hija(s)` };
   }
 
   private async seedTenantData(ds: DataSource, dto: CreateTenantDto) {
@@ -187,4 +278,86 @@ export class TenantProvisioningService {
     this.logger.log(`Default data seeded for new tenant`);
   }
 
+  private parseUrl(url: string): { host: string; port: number; username: string; password: string } {
+    // mysql://user:pass@host:port/db
+    const match = url.match(/mysql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)/);
+    if (!match) throw new BadRequestException("Invalid DATABASE_ADMIN_URL format");
+    return { username: match[1], password: match[2], host: match[3], port: Number(match[4]) };
+  }
+
+  private async resolveTenantInfo(slug: string): Promise<TenantInfo> {
+    const tenant = await this.prisma.tenant.findUnique({ where: { slug } });
+    if (!tenant) throw new NotFoundException(`Empresa '${slug}' no encontrada`);
+    return { id: tenant.id, slug: tenant.slug, dbName: tenant.dbName, dbHost: tenant.dbHost, dbPort: tenant.dbPort, dbUser: tenant.dbUser, dbPass: tenant.dbPass };
+  }
+
+  async listTenantUsers(slug: string) {
+    const info = await this.resolveTenantInfo(slug);
+    const repo = await this.tds.getRepository(User, info);
+    const users = await repo.find({
+      relations: { userRoles: { role: true } },
+      order: { createdAt: "DESC" },
+    });
+    return users.map((u) => ({
+      id: u.id,
+      email: u.email,
+      full_name: u.fullName,
+      is_active: u.isActive,
+      last_login_at: u.lastLoginAt,
+      created_at: u.createdAt,
+      roles: (u.userRoles ?? []).map((ur) => ur.role).filter(Boolean).map((r) => ({ id: r.id, code: r.code, name: r.name })),
+    }));
+  }
+
+  async createTenantUser(slug: string, dto: CreateUserDto) {
+    const info = await this.resolveTenantInfo(slug);
+    const repo = await this.tds.getRepository(User, info);
+    const email = dto.email.trim().toLowerCase();
+    const exists = await repo.findOne({ where: { email } as any });
+    if (exists) throw new ConflictException("Email already exists");
+
+    const user = repo.create({ email, fullName: dto.full_name.trim(), isActive: dto.is_active ?? true, lastLoginAt: null });
+    const salt = await bcrypt.genSalt(10);
+    user.passwordHash = await bcrypt.hash(dto.password, salt);
+    const saved = await repo.save(user);
+
+    if (dto.role_ids?.length) {
+      const urRepo = await this.tds.getRepository(UserRole, info);
+      const roleRepo = await this.tds.getRepository(Role, info);
+      const uniqueIds = Array.from(new Set(dto.role_ids.map(Number).filter(Boolean)));
+      const roles = await roleRepo.find({ where: { id: In(uniqueIds) } as any });
+      for (const role of roles) {
+        await urRepo.save(urRepo.create({ userId: saved.id, roleId: role.id }));
+      }
+    }
+
+    const full = await repo.findOne({ where: { id: saved.id } as any, relations: { userRoles: { role: true } } });
+    const u = full!;
+    return {
+      id: u.id, email: u.email, full_name: u.fullName, is_active: u.isActive, last_login_at: u.lastLoginAt, created_at: u.createdAt,
+      roles: (u.userRoles ?? []).map((ur) => ur.role).filter(Boolean).map((r) => ({ id: r.id, code: r.code, name: r.name })),
+    };
+  }
+
+  async getTenantConfig(slug: string) {
+    const info = await this.resolveTenantInfo(slug);
+    const repo = await this.tds.getRepository(EmpresaConfig, info);
+    let config = await repo.findOne({ where: { id: 1 } });
+    if (!config) {
+      config = repo.create({ id: 1, nombre: slug });
+      await repo.save(config);
+    }
+    return config;
+  }
+
+  async updateTenantConfig(slug: string, dto: UpdateEmpresaConfigDto) {
+    const info = await this.resolveTenantInfo(slug);
+    const repo = await this.tds.getRepository(EmpresaConfig, info);
+    let config = await repo.findOne({ where: { id: 1 } });
+    if (!config) {
+      config = repo.create({ id: 1, nombre: slug });
+    }
+    Object.assign(config, dto);
+    return repo.save(config);
+  }
 }

@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { randomBytes } from "crypto";
 import { TenantDataSourceService } from "../tenant/tenant-datasource.service";
 import { EmpresaConfig } from "./EmpresaConfig";
 import { UpdateEmpresaConfigDto } from "./dto/update-empresa-config.dto";
@@ -22,5 +23,13 @@ export class EmpresaConfigService {
     const config = await this.get();
     Object.assign(config, dto);
     return repo.save(config);
+  }
+
+  async regenerateWebFormKey(): Promise<{ web_form_api_key: string }> {
+    const repo = await this.tds.getRepository(EmpresaConfig);
+    const config = await this.get();
+    config.web_form_api_key = randomBytes(32).toString("hex");
+    await repo.save(config);
+    return { web_form_api_key: config.web_form_api_key };
   }
 }

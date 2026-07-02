@@ -57,6 +57,13 @@ export class EmpresaConfig {
   @Column({ type: "text", nullable: true })
   fb_page_access_token: string | null;
 
+  @Column({ type: "varchar", length: 50, nullable: true })
+  fb_page_id: string | null;
+
+  // ─── Web Form ─────────────────────────────────────────────────────────────
+  @Column({ type: "varchar", length: 64, nullable: true, unique: true })
+  web_form_api_key: string | null;
+
   @CreateDateColumn()
   created_at: Date;
 

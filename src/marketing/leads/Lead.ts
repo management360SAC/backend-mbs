@@ -36,6 +36,13 @@ export class Lead {
   @Column({ type: "text", nullable: true })
   notes?: string | null;
 
+  @Column({ name: "origin_company", type: "varchar", length: 200, nullable: true })
+  originCompany?: string | null;
+
+  @Column({ name: "fb_leadgen_id", type: "varchar", length: 50, nullable: true, unique: true })
+  @Index()
+  fbLeadgenId?: string | null;
+
   @Column({ name: "expected_value", type: "numeric", precision: 12, scale: 2, nullable: true })
   expectedValue?: number | null;
 

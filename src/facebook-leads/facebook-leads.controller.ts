@@ -78,8 +78,9 @@ export class FacebookLeadsController {
     for (const entry of entries) {
       for (const change of entry.changes ?? []) {
         if (change.field === "leadgen" && change.value?.leadgen_id) {
+          const pageId = change.value.page_id ?? entry.id;
           this.service
-            .processLeadgenId(change.value.leadgen_id)
+            .processLeadgenId(change.value.leadgen_id, pageId)
             .catch((err) => this.logger.error(`Error procesando leadgen_id: ${err}`));
         }
       }
