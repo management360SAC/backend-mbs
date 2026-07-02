@@ -1,7 +1,8 @@
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
-const adapter = new PrismaMariaDb(process.env.DATABASE_MASTER_URL as string);
+const rawUrl = process.env.DATABASE_URL as string;
+const adapter = new PrismaMariaDb(rawUrl.replace(/^mysql:\/\//, "mariadb://"));
 const prisma = new PrismaClient({ adapter });
 
 const TENANTS = [

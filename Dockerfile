@@ -35,7 +35,7 @@ COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/clie
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
 # Puerto por defecto de NestJS
-EXPOSE 8081
+EXPOSE 8080
 
 # Comando de inicio
 CMD ["node", "dist/main.js"]
