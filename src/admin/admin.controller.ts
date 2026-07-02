@@ -49,4 +49,10 @@ export class AdminController {
   updateTenantConfig(@Param("slug") slug: string, @Body() dto: UpdateEmpresaConfigDto) {
     return this.service.updateTenantConfig(slug, dto);
   }
+
+  @UseGuards(JwtAuthGuard)
+  @Post("tenants/:slug/sync-roles")
+  syncRolesToChildren(@Param("slug") slug: string) {
+    return this.service.syncRolesToChildren(slug);
+  }
 }

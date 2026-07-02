@@ -23,4 +23,8 @@ export class CreateTenantDto {
   @IsOptional()
   @IsString()
   adminFullName?: string;
+
+  @IsOptional()
+  @IsString()
+  parentSlug?: string;
 }
