@@ -13,6 +13,7 @@ import { PaymentsModule } from "./payments/payments.module";
 import { ActivityLogsModule } from "./activity-logs/activity-logs.module";
 import { EmpresaClienteModule } from "./empresa-cliente/empresa-cliente.module";
 import { FacebookLeadsModule } from "./facebook-leads/facebook-leads.module";
+import { WebFormModule } from "./web-form/web-form.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { TenantModule } from "./tenant/tenant.module";
 import { TenantMiddleware } from "./tenant/tenant.middleware";
@@ -36,6 +37,7 @@ import { AdminModule } from "./admin/admin.module";
     ActivityLogsModule,
     EmpresaClienteModule,
     FacebookLeadsModule,
+    WebFormModule,
     AdminModule,
   ],
 })
@@ -43,7 +45,7 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
       .apply(TenantMiddleware)
-      .exclude("auth/login", "admin/tenants/public", "facebook/webhook")
+      .exclude("auth/login", "admin/tenants/public", "facebook/webhook", "web-form/lead")
       .forRoutes("*");
   }
 }
