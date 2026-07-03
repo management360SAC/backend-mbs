@@ -29,9 +29,11 @@ export class PrismaService
   }
 
   async onModuleInit() {
-    await this.bootstrapMasterDb();
-    await this.$connect();
-    this.logger.log("Conectado a crm_master");
+    // Bootstrap corre en background — no bloquea el arranque de la app
+    this.bootstrapMasterDb()
+      .then(() => this.$connect())
+      .then(() => this.logger.log("Conectado a crm_master"))
+      .catch((err: any) => this.logger.error("PrismaService init error:", err?.message));
   }
 
   async onModuleDestroy() {
