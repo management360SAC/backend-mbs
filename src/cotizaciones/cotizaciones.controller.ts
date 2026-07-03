@@ -16,6 +16,7 @@ import { CotizacionesService } from "./cotizaciones.service";
 import { CreateCotizacionDto } from "./dto/create-cotizacion.dto";
 import { CambiarEstadoDto, UpdateCotizacionDto } from "./dto/update-cotizacion.dto";
 import { SendCotizacionDto } from "./dto/send-cotizacion.dto";
+import { ManualEmailDto } from "./dto/manual-email.dto";
 
 @UseGuards(JwtAuthGuard)
 @Controller("cotizaciones")
@@ -82,6 +83,11 @@ export class CotizacionesController {
   @Post(":id/enviar")
   enviar(@Param("id") id: string, @Body() dto: SendCotizacionDto) {
     return this.service.enviar(Number(id), dto);
+  }
+
+  @Post(":id/email-manual")
+  emailManual(@Param("id") id: string, @Body() dto: ManualEmailDto) {
+    return this.service.emailManual(Number(id), dto);
   }
 
   @Get(":id/envios")
