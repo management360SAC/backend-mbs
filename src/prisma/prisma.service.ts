@@ -108,9 +108,6 @@ export class PrismaService
   }
 
   private async seedInitialTenant() {
-    const count = await this.tenant.count();
-    if (count > 0) return;
-
     const { host, port, user, password, database } = parseMasterUrl();
     const dbHost = process.env.DB_HOST ?? host;
     const dbPort = parseInt(process.env.DB_PORT ?? String(port), 10);
@@ -118,20 +115,24 @@ export class PrismaService
     const dbPass = process.env.DB_PASS ?? password;
     const dbName = process.env.DB_NAME ?? database;
 
-    await this.tenant.create({
-      data: {
-        name: "Management 360",
-        slug: "management360",
-        dbName,
-        dbHost,
-        dbPort,
-        dbUser,
-        dbPass,
-        isActive: true,
-      },
-    });
-    this.logger.log("Tenant inicial 'Management 360' creado");
+    const count = await this.tenant.count();
+    if (count === 0) {
+      await this.tenant.create({
+        data: {
+          name: "Management 360",
+          slug: "management360",
+          dbName,
+          dbHost,
+          dbPort,
+          dbUser,
+          dbPass,
+          isActive: true,
+        },
+      });
+      this.logger.log("Tenant inicial 'Management 360' creado");
+    }
 
+    // Siempre verificar que el schema y usuario admin existan
     await this.setupTenantDatabase(dbHost, dbPort, dbUser, dbPass, dbName);
   }
 
