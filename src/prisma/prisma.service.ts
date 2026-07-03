@@ -5,14 +5,16 @@ import mariadb from "mariadb";
 
 const MASTER_DB = "crm_master";
 
+function parseMasterUrl() {
+  const raw = (process.env.DATABASE_MASTER_URL ?? "").replace(/^["']|["']$/g, "");
+  const m = raw.match(/^(?:mysql|mariadb):\/\/([^:]+):([^@]*)@([^:/]+):?(\d+)?\/([^?#]+)/);
+  if (!m) throw new Error(`DATABASE_MASTER_URL inválida o no configurada: "${raw}"`);
+  const [, user, password, host, rawPort, database] = m;
+  return { host, port: rawPort ? parseInt(rawPort, 10) : 3306, user, password, database };
+}
+
 function createAdapter() {
-  return new PrismaMariaDb({
-    host:     process.env.DB_HOST     ?? "db",
-    port:     parseInt(process.env.DB_PORT ?? "3306", 10),
-    user:     process.env.DB_USER     ?? "crm",
-    password: process.env.DB_PASS     ?? "crm",
-    database: MASTER_DB,
-  });
+  return new PrismaMariaDb(parseMasterUrl());
 }
 
 @Injectable()
@@ -37,10 +39,7 @@ export class PrismaService
   }
 
   private async bootstrapMasterDb() {
-    const host     = process.env.DB_HOST ?? "db";
-    const port     = parseInt(process.env.DB_PORT ?? "3306", 10);
-    const user     = process.env.DB_USER ?? "crm";
-    const password = process.env.DB_PASS ?? "crm";
+    const { host, port, user, password } = parseMasterUrl();
 
     // Intentar crear la BD y tabla usando el usuario crm directamente
     let conn: mariadb.Connection | undefined;
