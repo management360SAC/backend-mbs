@@ -180,17 +180,22 @@ export class PrismaService
   private async setupTenantDatabase(
     host: string, port: number, user: string, password: string, database: string,
   ) {
+    // Usar root para synchronize:true — mbscrm no tiene permisos ALTER TABLE
+    const admin = this.parseAdminUrl();
     const ds = new DataSource({
       type: "mysql",
-      host, port, username: user, password, database,
+      host:     admin?.host ?? host,
+      port:     admin?.port ?? port,
+      username: admin?.user ?? user,
+      password: admin?.password ?? password,
+      database,
       entities: TENANT_ENTITIES,
-      synchronize: false,
+      synchronize: true,
     });
 
     try {
       await ds.initialize();
-      await this.patchTenantSchema(database);
-      this.logger.log(`Schema parcheado para ${database}`);
+      this.logger.log(`Schema sincronizado para ${database}`);
 
       // Permisos
       const permRepo = ds.getRepository(Permission);
