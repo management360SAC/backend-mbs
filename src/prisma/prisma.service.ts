@@ -136,6 +136,47 @@ export class PrismaService
     await this.setupTenantDatabase(dbHost, dbPort, dbUser, dbPass, dbName);
   }
 
+  private parseAdminUrl() {
+    const raw = (process.env.DATABASE_ADMIN_URL ?? "").replace(/^["']|["']$/g, "");
+    const m = raw.match(/^(?:mysql|mariadb):\/\/([^:]+):([^@]*)@([^:/]+):?(\d+)?\/([^?#]+)/);
+    if (!m) return null;
+    const [, user, password, host, rawPort] = m;
+    return { user, password, host, port: rawPort ? parseInt(rawPort, 10) : 3306 };
+  }
+
+  private async patchTenantSchema(database: string) {
+    const admin = this.parseAdminUrl();
+    if (!admin) {
+      this.logger.warn("DATABASE_ADMIN_URL no configurada, saltando patch de schema");
+      return;
+    }
+    let conn: mysql.Connection | undefined;
+    try {
+      conn = await mysql.createConnection({ host: admin.host, port: admin.port, user: admin.user, password: admin.password, database });
+      const columns: [string, string][] = [
+        ["fb_verify_token",      "VARCHAR(200)"],
+        ["fb_page_access_token", "TEXT"],
+        ["fb_page_id",           "VARCHAR(50)"],
+        ["web_form_api_key",     "VARCHAR(64)"],
+      ];
+      for (const [col, type] of columns) {
+        const [rows] = await conn.execute<mysql.RowDataPacket[]>(
+          `SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.COLUMNS
+           WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'empresa_config' AND COLUMN_NAME = ?`,
+          [database, col],
+        );
+        if ((rows[0]?.cnt ?? 0) === 0) {
+          await conn.execute(`ALTER TABLE \`empresa_config\` ADD COLUMN \`${col}\` ${type} NULL`);
+          this.logger.log(`Columna ${col} agregada a empresa_config en ${database}`);
+        }
+      }
+    } catch (err: any) {
+      this.logger.error(`Patch tenant schema: ${err?.message}`);
+    } finally {
+      await conn?.end().catch(() => {});
+    }
+  }
+
   private async setupTenantDatabase(
     host: string, port: number, user: string, password: string, database: string,
   ) {
@@ -143,12 +184,13 @@ export class PrismaService
       type: "mysql",
       host, port, username: user, password, database,
       entities: TENANT_ENTITIES,
-      synchronize: true,
+      synchronize: false,
     });
 
     try {
       await ds.initialize();
-      this.logger.log(`Schema sincronizado para ${database}`);
+      await this.patchTenantSchema(database);
+      this.logger.log(`Schema parcheado para ${database}`);
 
       // Permisos
       const permRepo = ds.getRepository(Permission);

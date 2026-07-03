@@ -26,7 +26,7 @@ export class TenantDataSourceService implements OnModuleDestroy {
       password: info.dbPass,
       database: info.dbName,
       entities: TENANT_ENTITIES,
-      synchronize: true,
+      synchronize: false,
       poolSize: 5,
     });
 
