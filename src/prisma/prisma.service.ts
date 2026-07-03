@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
+import mysql from "mysql2/promise";
 
 function parseMasterUrl() {
   const raw = (process.env.DATABASE_MASTER_URL ?? "").replace(/^["']|["']$/g, "");
@@ -26,6 +27,7 @@ export class PrismaService
   }
 
   async onModuleInit() {
+    await this.bootstrapTenantsTable();
     await this.$connect();
     this.logger.log("Conectado a base de datos master");
     this.seedInitialTenant().catch((err: any) =>
@@ -37,25 +39,53 @@ export class PrismaService
     await this.$disconnect();
   }
 
+  private async bootstrapTenantsTable() {
+    const { host, port, user, password, database } = parseMasterUrl();
+    let conn: mysql.Connection | undefined;
+    try {
+      conn = await mysql.createConnection({ host, port, user, password, database });
+      await conn.execute(`
+        CREATE TABLE IF NOT EXISTS \`tenants\` (
+          \`id\`         INT          NOT NULL AUTO_INCREMENT,
+          \`name\`       VARCHAR(200) NOT NULL,
+          \`slug\`       VARCHAR(100) NOT NULL,
+          \`db_name\`    VARCHAR(100) NOT NULL,
+          \`db_host\`    VARCHAR(255) NOT NULL DEFAULT 'db',
+          \`db_port\`    INT          NOT NULL DEFAULT 3306,
+          \`db_user\`    VARCHAR(100) NOT NULL DEFAULT 'crm',
+          \`db_pass\`    VARCHAR(255) NOT NULL DEFAULT 'crm',
+          \`is_active\`  TINYINT(1)   NOT NULL DEFAULT 1,
+          \`parent_id\`  INT          NULL,
+          \`created_at\` DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+          \`updated_at\` DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+                          ON UPDATE CURRENT_TIMESTAMP(3),
+          UNIQUE INDEX \`tenants_slug_key\` (\`slug\`),
+          PRIMARY KEY (\`id\`)
+        ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+      `);
+      this.logger.log(`Tabla tenants lista en ${database}`);
+    } catch (err: any) {
+      this.logger.error(`Bootstrap falló: ${err?.message}`);
+    } finally {
+      await conn?.end().catch(() => {});
+    }
+  }
+
   private async seedInitialTenant() {
     const count = await this.tenant.count();
     if (count > 0) return;
 
-    const host = process.env.DB_HOST ?? "db";
-    const port = parseInt(process.env.DB_PORT ?? "3306", 10);
-    const user = process.env.DB_USER ?? "crm";
-    const pass = process.env.DB_PASS ?? "crm";
-    const name = process.env.DB_NAME ?? "default";
+    const { host, port, user: dbUser, password: dbPass, database } = parseMasterUrl();
 
     await this.tenant.create({
       data: {
         name: "Management 360",
         slug: "management360",
-        dbName: name,
-        dbHost: host,
-        dbPort: port,
-        dbUser: user,
-        dbPass: pass,
+        dbName: process.env.DB_NAME ?? database,
+        dbHost: process.env.DB_HOST ?? host,
+        dbPort: parseInt(process.env.DB_PORT ?? String(port), 10),
+        dbUser: process.env.DB_USER ?? dbUser,
+        dbPass: process.env.DB_PASS ?? dbPass,
         isActive: true,
       },
     });
