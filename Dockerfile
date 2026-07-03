@@ -29,10 +29,11 @@ COPY package*.json ./
 # Instalar solo dependencias de producción
 RUN npm install --omit=dev
 
-# Copiar build compilado y cliente Prisma generado
+# Copiar build compilado, cliente Prisma generado y variables de entorno
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/.env .env
 
 # Puerto por defecto de NestJS
 EXPOSE 8080
