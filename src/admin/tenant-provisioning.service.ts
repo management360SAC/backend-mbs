@@ -53,11 +53,16 @@ export class TenantProvisioningService {
   ) {}
 
   async listTenantsPublic() {
-    return this.prisma.tenant.findMany({
-      where: { isActive: true },
-      orderBy: { name: "asc" },
-      select: { slug: true, name: true },
-    });
+    try {
+      return await this.prisma.tenant.findMany({
+        where: { isActive: true },
+        orderBy: { name: "asc" },
+        select: { slug: true, name: true },
+      });
+    } catch (err: any) {
+      this.logger.error("listTenantsPublic error:", err?.message, err?.stack);
+      throw new Error(`DB error: ${err?.message ?? String(err)}`);
+    }
   }
 
   async listTenants() {
