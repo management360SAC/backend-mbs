@@ -107,6 +107,23 @@ export class PrismaService
       `).catch(() => {/* columna ya existe */});
 
       this.logger.log("crm_master: BD y tabla tenants verificadas/creadas correctamente");
+
+      // Sembrar tenant inicial si la tabla está vacía
+      const rows = await ds.query(`SELECT COUNT(*) AS cnt FROM \`${MASTER_DB}\`.\`tenants\``);
+      if (Number(rows[0].cnt) === 0) {
+        const dbHost = process.env.DB_HOST ?? "db";
+        const dbPort = parseInt(process.env.DB_PORT ?? "3306", 10);
+        const dbUser = crmUser;
+        const dbPass = process.env.DB_PASS ?? "crm";
+        const dbName = process.env.DB_NAME ?? "default";
+        await ds.query(`
+          INSERT INTO \`${MASTER_DB}\`.\`tenants\`
+            (name, slug, db_name, db_host, db_port, db_user, db_pass, is_active)
+          VALUES
+            ('Management 360', 'management360', '${dbName}', '${dbHost}', ${dbPort}, '${dbUser}', '${dbPass}', 1)
+        `);
+        this.logger.log("Tenant inicial 'Management 360' creado en crm_master");
+      }
     } catch (err: any) {
       this.logger.error(`Bootstrap crm_master falló: ${err?.message}`);
     } finally {
