@@ -11,6 +11,7 @@ import { EmpresaConfig } from "../empresa-config/EmpresaConfig";
 import { CreateCotizacionDto } from "./dto/create-cotizacion.dto";
 import { CambiarEstadoDto, UpdateCotizacionDto } from "./dto/update-cotizacion.dto";
 import { SendCotizacionDto } from "./dto/send-cotizacion.dto";
+import { ManualEmailDto } from "./dto/manual-email.dto";
 import { PdfService } from "./pdf.service";
 import { EmailService } from "./email.service";
 
@@ -464,6 +465,60 @@ export class CotizacionesService {
     }
 
     return savedEnvio;
+  }
+
+  async emailManual(id: number, dto: ManualEmailDto): Promise<CotizacionEnvio> {
+    const cotRepo    = await this.tds.getRepository(Cotizacion);
+    const envioRepo  = await this.tds.getRepository(CotizacionEnvio);
+    const configRepo = await this.tds.getRepository(EmpresaConfig);
+
+    const cot = await cotRepo.findOne({ where: { id } });
+    if (!cot) throw new NotFoundException("Cotización no encontrada");
+
+    const empresa = await configRepo.findOne({ where: { id: 1 } });
+
+    const smtpConfig = empresa?.smtp_host
+      ? {
+          host: empresa.smtp_host,
+          port: empresa.smtp_port ?? 587,
+          user: empresa.smtp_user ?? "",
+          pass: empresa.smtp_pass ?? "",
+          from: empresa.smtp_from ?? empresa.email ?? "",
+        }
+      : null;
+
+    const html = `
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/>
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8fafc;margin:0;padding:20px}
+  .container{max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)}
+  .header{background:#2563eb;padding:28px 40px}
+  .header h1{color:#fff;margin:0;font-size:20px;font-weight:700}
+  .body{padding:32px 40px;color:#374151;line-height:1.7;white-space:pre-wrap}
+  .footer{padding:16px 40px;background:#f1f5f9;font-size:12px;color:#64748b}
+</style></head><body>
+<div class="container">
+  <div class="header"><h1>${empresa?.nombre ?? "MBS"}</h1></div>
+  <div class="body">${dto.cuerpo.replace(/\n/g, "<br/>")}</div>
+  <div class="footer">Cotización referencia: ${cot.numero}</div>
+</div></body></html>`.trim();
+
+    const emailResult = await this.emailService.sendEmail(smtpConfig, {
+      to: dto.email_destino,
+      subject: dto.asunto,
+      html,
+    });
+
+    const envio = envioRepo.create({
+      cotizacion_id: id,
+      email_destino: dto.email_destino,
+      asunto: dto.asunto,
+      mensaje: dto.cuerpo,
+      resultado: emailResult.ok ? "SUCCESS" : "ERROR",
+      error_msg: emailResult.error ?? null,
+    });
+
+    return envioRepo.save(envio);
   }
 
   async getEnvios(id: number): Promise<CotizacionEnvio[]> {
