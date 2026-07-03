@@ -5,9 +5,9 @@
   "compilerOptions": {
     "deleteOutDir": true,
     "assets": [
-      { "include": "cotizaciones/proforma-template.pdf", "outDir": "dist/src", "watchAssets": true },
-      { "include": "cotizaciones/arial.ttf", "outDir": "dist/src", "watchAssets": true },
-      { "include": "cotizaciones/arial-bold.ttf", "outDir": "dist/src", "watchAssets": true }
+      { "include": "cotizaciones/proforma-template.pdf", "outDir": "dist", "watchAssets": true },
+      { "include": "cotizaciones/arial.ttf", "outDir": "dist", "watchAssets": true },
+      { "include": "cotizaciones/arial-bold.ttf", "outDir": "dist", "watchAssets": true }
     ]
   }
 }
