@@ -27,10 +27,13 @@ export class PrismaService
   }
 
   async onModuleInit() {
-    this.bootstrapTenantsTable()
-      .then(() => this.$connect())
-      .then(() => this.logger.log("Conectado a base de datos master"))
-      .catch((err: any) => this.logger.error("PrismaService init error:", err?.message));
+    try {
+      await this.bootstrapTenantsTable();
+    } catch (err: any) {
+      this.logger.error("Bootstrap error (continuando):", err?.message);
+    }
+    await this.$connect();
+    this.logger.log("Conectado a base de datos master");
   }
 
   async onModuleDestroy() {
