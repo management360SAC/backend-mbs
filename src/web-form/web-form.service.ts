@@ -3,9 +3,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import { TenantDataSourceService } from "../tenant/tenant-datasource.service";
 import { TenantContext, TenantInfo } from "../tenant/tenant.context";
 import { EmpresaConfig } from "../empresa-config/EmpresaConfig";
-import { Lead } from "../marketing/leads/Lead";
+import { Contact } from "../marketing/contacts/Contact";
 import { LeadSource } from "../marketing/lead-sources/LeadSource";
-import { LeadStage } from "../marketing/lead-stages/LeadStages";
 import { SubmitFormDto } from "./dto/submit-form.dto";
 
 @Injectable()
@@ -36,7 +35,7 @@ export class WebFormService {
 
       if (matched) {
         await TenantContext.run(info, async () => {
-          await this.saveLead(dto, matched.nombre, t.slug);
+          await this.saveContact(dto, t.slug);
         });
         return;
       }
@@ -45,28 +44,22 @@ export class WebFormService {
     throw new UnauthorizedException("API key inválida");
   }
 
-  private async saveLead(dto: SubmitFormDto, companyName: string, tenantSlug: string): Promise<void> {
+  private async saveContact(dto: SubmitFormDto, tenantSlug: string): Promise<void> {
     const source = await this.getOrCreateSource("Formulario Web", "web");
-    const stage = await this.getFirstStage();
 
-    if (!stage) {
-      this.logger.error(`[${tenantSlug}] No hay stages configurados`);
-      return;
-    }
-
-    const repo = await this.tds.getRepository(Lead);
-    const lead = repo.create({
-      fullName: dto.nombre,
-      email: dto.correo,
-      phone: dto.telefono,
+    const repo = await this.tds.getRepository(Contact);
+    const contact = repo.create({
+      full_name: dto.nombre,
+      email: dto.correo ?? null,
+      phone: dto.telefono ?? null,
       notes: dto.mensaje ?? null,
-      originCompany: companyName,
-      sourceId: source.id,
-      currentStage: stage,
-    } as any);
+      type: "lead",
+      status: "new",
+      source_id: source.id,
+    });
 
-    await repo.save(lead);
-    this.logger.log(`[${tenantSlug}] Lead web creado: ${dto.nombre} (${dto.correo})`);
+    await repo.save(contact);
+    this.logger.log(`[${tenantSlug}] Contacto web creado: ${dto.nombre} (${dto.correo})`);
   }
 
   private async getOrCreateSource(name: string, channel: string): Promise<LeadSource> {
@@ -77,13 +70,5 @@ export class WebFormService {
       await repo.save(source);
     }
     return source;
-  }
-
-  private async getFirstStage(): Promise<LeadStage | null> {
-    const repo = await this.tds.getRepository(LeadStage);
-    return repo.findOne({
-      where: { isActive: true, isFinal: false },
-      order: { order: "ASC" },
-    });
   }
 }
