@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from "@nestjs/common";
+import { Body, Controller, ForbiddenException, Get, Headers, Param, Patch, Post, Query, Request, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { TenantProvisioningService } from "./tenant-provisioning.service";
+import { DbResetService } from "./db-reset.service";
 import { CreateTenantDto } from "./dto/create-tenant.dto";
 import { CreateUserDto } from "../users/dto/users.dto";
 import { UpdateEmpresaConfigDto } from "../empresa-config/dto/update-empresa-config.dto";
@@ -11,6 +12,7 @@ export class AdminController {
   constructor(
     private readonly service: TenantProvisioningService,
     private readonly audit: AuditService,
+    private readonly dbReset: DbResetService,
   ) {}
 
   @Get("tenants/public")
@@ -93,5 +95,12 @@ export class AdminController {
       page: page ? Number(page) : 1,
       limit: limit ? Number(limit) : 10,
     });
+  }
+
+  @Post("db-reset")
+  async dbReset(@Headers("x-reset-token") token: string) {
+    const expected = process.env.TOKEN_META;
+    if (!expected || token !== expected) throw new ForbiddenException("Token inválido");
+    return this.dbReset.runReset();
   }
 }
