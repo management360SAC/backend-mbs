@@ -155,12 +155,14 @@ export class DbResetService {
       if (!exists) await rpRepo.save(rpRepo.create({ roleId: vendedorRole.id, permissionId: perm.id }));
     }
 
-    // Admin user
+    // Admin user — always reset password so re-runs on existing DBs work correctly
+    const hash = await bcrypt.hash(ADMIN_PASSWORD, await bcrypt.genSalt(10));
     const userRepo = ds.getRepository(User);
     let adminUser = await userRepo.findOne({ where: { email: ADMIN_EMAIL } } as any);
     if (!adminUser) {
-      const hash = await bcrypt.hash(ADMIN_PASSWORD, await bcrypt.genSalt(10));
       adminUser = await userRepo.save(userRepo.create({ email: ADMIN_EMAIL, fullName: ADMIN_FULLNAME, isActive: true, passwordHash: hash, lastLoginAt: null }));
+    } else {
+      await userRepo.update(adminUser.id, { passwordHash: hash });
     }
 
     const urRepo = ds.getRepository(UserRole);

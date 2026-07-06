@@ -174,11 +174,14 @@ let DbResetService = DbResetService_1 = class DbResetService {
             if (!exists)
                 await rpRepo.save(rpRepo.create({ roleId: vendedorRole.id, permissionId: perm.id }));
         }
+        const hash = await bcrypt.hash(ADMIN_PASSWORD, await bcrypt.genSalt(10));
         const userRepo = ds.getRepository(user_entity_1.User);
         let adminUser = await userRepo.findOne({ where: { email: ADMIN_EMAIL } });
         if (!adminUser) {
-            const hash = await bcrypt.hash(ADMIN_PASSWORD, await bcrypt.genSalt(10));
             adminUser = await userRepo.save(userRepo.create({ email: ADMIN_EMAIL, fullName: ADMIN_FULLNAME, isActive: true, passwordHash: hash, lastLoginAt: null }));
+        }
+        else {
+            await userRepo.update(adminUser.id, { passwordHash: hash });
         }
         const urRepo = ds.getRepository(user_role_entity_1.UserRole);
         const urExists = await urRepo.findOne({ where: { userId: adminUser.id, roleId: adminRole.id } });
