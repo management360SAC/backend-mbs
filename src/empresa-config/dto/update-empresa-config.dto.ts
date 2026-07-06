@@ -60,4 +60,8 @@ export class UpdateEmpresaConfigDto {
   @IsOptional()
   @IsString()
   fb_page_access_token?: string | null;
+
+  @IsOptional()
+  @IsString()
+  fb_page_id?: string | null;
 }
