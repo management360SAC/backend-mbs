@@ -1,6 +1,6 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 
-@Entity({ name: "mk_segments" })
+@Entity({ name: "segments" })
 export class Segment {
   @PrimaryGeneratedColumn()
   id: number;

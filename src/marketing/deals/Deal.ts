@@ -16,7 +16,7 @@ import { User } from "../../users/user.entity";
 
 export type DealStatus = "open" | "won" | "lost";
 
-@Entity({ name: "mk_deals" })
+@Entity({ name: "deals" })
 export class Deal {
   @PrimaryGeneratedColumn({ type: "bigint" })
   id: string;

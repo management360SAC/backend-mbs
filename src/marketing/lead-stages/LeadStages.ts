@@ -7,7 +7,7 @@ import {
   Index,
 } from "typeorm";
 
-@Entity({ name: "mk_lead_stages" })
+@Entity({ name: "lead_stages" })
 export class LeadStage {
   @PrimaryGeneratedColumn()
   id: number;

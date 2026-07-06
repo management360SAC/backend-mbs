@@ -11,6 +11,7 @@ import { RolePermission } from "../roles/role-permission.entity";
 import { Permission } from "../permissions/permission.entity";
 import { UserRole } from "../users/user-role.entity";
 import { LeadStage } from "../marketing/lead-stages/LeadStages";
+import { Contact } from "../marketing/contacts/Contact";
 import { EmpresaConfig } from "../empresa-config/EmpresaConfig";
 import { CreateTenantDto } from "./dto/create-tenant.dto";
 import { CreateUserDto } from "../users/dto/users.dto";
@@ -353,6 +354,59 @@ export class TenantProvisioningService {
       await repo.save(config);
     }
     return config;
+  }
+
+  async getAllTenantsLeads(params: {
+    tenantSlug: string;
+    q?: string;
+    status?: string;
+    sourceId?: number;
+    page: number;
+    limit: number;
+  }) {
+    const prismaCurrentTenant = await this.prisma.tenant.findUnique({ where: { slug: params.tenantSlug } });
+    if (!prismaCurrentTenant) return { items: [], meta: { total: 0, page: 1, limit: params.limit, totalPages: 0 } };
+
+    const children = await this.prisma.tenant.findMany({
+      where: { parentId: prismaCurrentTenant.id, isActive: true },
+    });
+
+    const allTenants = [
+      { prisma: prismaCurrentTenant },
+      ...children.map((c) => ({ prisma: c })),
+    ];
+
+    const allItems: any[] = [];
+
+    for (const { prisma: t } of allTenants) {
+      const info: TenantInfo = {
+        id: t.id, slug: t.slug, dbName: t.dbName,
+        dbHost: t.dbHost, dbPort: t.dbPort, dbUser: t.dbUser, dbPass: t.dbPass,
+      };
+      try {
+        const repo = await this.tds.getRepository(Contact, info);
+        const qb = repo.createQueryBuilder("c").where("c.type = :type", { type: "lead" });
+
+        if (params.status) qb.andWhere("c.status = :status", { status: params.status });
+        if (params.sourceId) qb.andWhere("c.source_id = :sid", { sid: params.sourceId });
+        if (params.q) {
+          qb.andWhere("(c.full_name LIKE :q OR c.email LIKE :q OR c.phone LIKE :q)", { q: `%${params.q}%` });
+        }
+
+        const contacts = await qb.orderBy("c.id", "DESC").getMany();
+        contacts.forEach((c) => allItems.push({ ...c, tenantSlug: t.slug, tenantName: t.name }));
+      } catch {
+        // tenant DB might be unreachable, skip
+      }
+    }
+
+    allItems.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    const total = allItems.length;
+    const start = (params.page - 1) * params.limit;
+    const items = allItems.slice(start, start + params.limit);
+
+    return { items, meta: { total, page: params.page, limit: params.limit, totalPages: Math.ceil(total / params.limit) } };
   }
 
   async updateTenantConfig(slug: string, dto: UpdateEmpresaConfigDto) {

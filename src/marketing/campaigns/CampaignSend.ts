@@ -1,6 +1,6 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from "typeorm";
 
-@Entity({ name: "mk_campaign_sends" })
+@Entity({ name: "campaign_sends" })
 export class CampaignSend {
   @PrimaryGeneratedColumn()
   id: number;

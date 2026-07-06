@@ -11,7 +11,7 @@ import {
 import { Contact } from "../contacts/Contact";
 import { Campaign } from "../campaigns/Campaign";
 
-@Entity({ name: "mk_touchpoints" })
+@Entity({ name: "touchpoints" })
 export class Touchpoint {
   @PrimaryGeneratedColumn({ type: "bigint" })
   id: string;

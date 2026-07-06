@@ -24,8 +24,15 @@ export class PaymentsController {
   findAll(
     @Query("contact_id", new ParseIntPipe({ optional: true })) contact_id?: number,
     @Query("course_id", new ParseIntPipe({ optional: true })) course_id?: number,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
   ) {
-    return this.service.findAll({ contact_id, course_id });
+    return this.service.findAll({
+      contact_id,
+      course_id,
+      page: page ? Number(page) : 1,
+      limit: limit ? Number(limit) : 10,
+    });
   }
 
   @Get(":id")

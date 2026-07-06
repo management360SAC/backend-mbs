@@ -5,7 +5,6 @@ import { Deal } from "../../marketing/deals/Deal";
 import { CreateDealDto } from "./dto/create-deal.dto";
 import { UpdateDealDto } from "./dto/update-deal.dto";
 import { FunnelStage } from "../funnel-stages/FunnelStage";
-import { DealStageHistory } from "../deal-stage-history/DealStageHistory";
 
 @Injectable()
 export class DealsService {
@@ -86,7 +85,6 @@ export class DealsService {
     return ds.transaction(async (manager) => {
       const dealRepo = manager.getRepository(Deal);
       const stageRepo = manager.getRepository(FunnelStage);
-      const historyRepo = manager.getRepository(DealStageHistory);
 
       const deal = await dealRepo.findOne({ where: { id: dealId } as any });
       if (!deal) throw new NotFoundException("Deal no existe");
@@ -94,21 +92,12 @@ export class DealsService {
       const toStage = await stageRepo.findOne({ where: { id: String(toStageId) } as any });
       if (!toStage) throw new NotFoundException("Stage destino no existe");
 
-      const fromStageId = String(deal.stageId);
-
-      if (fromStageId === String(toStageId)) {
+      if (String(deal.stageId) === String(toStageId)) {
         throw new BadRequestException("El deal ya está en esa etapa");
       }
 
       deal.stageId = String(toStageId);
       await dealRepo.save(deal);
-
-      await historyRepo.save({
-        deal_id: String(deal.id),
-        from_stage_id: Number(fromStageId),
-        to_stage_id: Number(String(toStageId)),
-        changed_by_id: changedById ? Number(String(changedById)) : null,
-      } as any);
 
       return dealRepo.findOne({
         where: { id: dealId } as any,

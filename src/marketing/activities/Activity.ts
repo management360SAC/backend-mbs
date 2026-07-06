@@ -11,7 +11,7 @@ import { Contact } from "../contacts/Contact";
 import { Deal } from "../deals/Deal";
 import { User } from "../../users/user.entity";
 
-@Entity({ name: "mk_activities" })
+@Entity({ name: "activities" })
 export class Activity {
   @PrimaryGeneratedColumn()
   id: number;

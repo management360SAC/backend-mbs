@@ -8,6 +8,7 @@ import {
   Query,
   ParseIntPipe,
   UseGuards,
+  Request,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { DealsService } from "./deals.service";
@@ -34,7 +35,8 @@ export class DealsController {
   }
 
   @Post()
-  create(@Body() dto: CreateDealDto) {
+  create(@Body() dto: CreateDealDto, @Request() req: any) {
+    (dto as any).createdBy = req.user?.userId ?? req.user?.id ?? null;
     return this.service.create(dto);
   }
 
@@ -44,19 +46,29 @@ export class DealsController {
     return this.service.update(id, dto);
   }
 
-  /**
-   * (Opcional) Endpoint para cambiar etapa
-   * PUT /deals/:id/stage/:toStageId
-   */
   @Put(":id/stage/:toStageId")
   changeStage(
     @Param("id") id: string,
     @Param("toStageId") toStageId: string,
+    @Request() req: any,
   ) {
     return this.service.changeStage({
       dealId: id,
       toStageId,
-      changedById: null, // aquí normalmente sacas el userId del JWT
+      changedById: req.user?.userId ?? req.user?.id ?? null,
+    });
+  }
+
+  @Post(":id/move-stage")
+  moveStage(
+    @Param("id") id: string,
+    @Body() body: { to_stage_id: number },
+    @Request() req: any,
+  ) {
+    return this.service.changeStage({
+      dealId: id,
+      toStageId: String(body.to_stage_id),
+      changedById: req.user?.userId ?? req.user?.id ?? null,
     });
   }
 }

@@ -10,7 +10,7 @@ import { Contact } from "../../marketing/contacts/Contact";
 import { Course } from "../../education/courses/Course";
 import { Deal } from "../../marketing/deals/Deal";
 
-@Entity({ name: "edu_enrollments" })
+@Entity({ name: "enrollments" })
 export class Enrollment {
   @PrimaryGeneratedColumn()
   id: number;

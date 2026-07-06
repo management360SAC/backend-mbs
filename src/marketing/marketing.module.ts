@@ -8,7 +8,6 @@ import { SellersModule } from "./sellers/sellers.module";
 import { LeadsModule } from "./leads/leads.module";
 import { DealsModule } from "./deals/deals.module";
 import { FunnelStagesModule } from "./funnel-stages/funnel-stages.module";
-import { DealStageHistoryModule } from "./deal-stage-history/deal-stage-history.module";
 import { ActivitiesModule } from "./activities/activities.module";
 import { TouchpointsModule } from "./touchpoints/touchpoints.module";
 import { NotesModule } from "./notes/notes.module";
@@ -28,7 +27,6 @@ import { ConsentsModule } from "./notes/consents/consents.module";
     LeadsModule,
     DealsModule,
     FunnelStagesModule,
-    DealStageHistoryModule,
     ActivitiesModule,
     TouchpointsModule,
     NotesModule,

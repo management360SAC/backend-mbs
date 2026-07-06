@@ -8,7 +8,7 @@ import {
 } from "typeorm";
 import { EmpresaContacto } from "./EmpresaContacto";
 
-@Entity({ name: "mk_empresa_cliente" })
+@Entity({ name: "empresa_clientes" })
 export class EmpresaCliente {
   @PrimaryGeneratedColumn()
   id: number;

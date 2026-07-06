@@ -12,7 +12,7 @@ import { Contact } from "../contacts/Contact";
 import { Deal } from "../deals/Deal";
 import { User } from "../../users/user.entity";
 
-@Entity({ name: "mk_notes" })
+@Entity({ name: "notes" })
 export class Note {
   @PrimaryGeneratedColumn({ type: "bigint" })
   id: string;

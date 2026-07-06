@@ -6,7 +6,7 @@ import {
   Index,
 } from "typeorm";
 
-@Entity({ name: "mk_tags" })
+@Entity({ name: "tags" })
 export class Tag {
   @PrimaryGeneratedColumn()
   id: number;

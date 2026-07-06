@@ -9,7 +9,6 @@ import { LeadStage } from "../marketing/lead-stages/LeadStages";
 import { LeadSource } from "../marketing/lead-sources/LeadSource";
 import { Deal } from "../marketing/deals/Deal";
 import { FunnelStage } from "../marketing/funnel-stages/FunnelStage";
-import { DealStageHistory } from "../marketing/deal-stage-history/DealStageHistory";
 import { Activity } from "../marketing/activities/Activity";
 import { Campaign } from "../marketing/campaigns/Campaign";
 import { CampaignFunnel } from "../marketing/campaigns/CampaignFunnel";
@@ -31,6 +30,7 @@ import { EmpresaConfig } from "../empresa-config/EmpresaConfig";
 import { EmpresaCliente } from "../empresa-cliente/EmpresaCliente";
 import { EmpresaContacto } from "../empresa-cliente/EmpresaContacto";
 import { EduPayment } from "../payments/EduPayment";
+import { AuditLog } from "../audit/audit-log.entity";
 
 export const TENANT_ENTITIES = [
   User,
@@ -44,7 +44,6 @@ export const TENANT_ENTITIES = [
   LeadSource,
   Deal,
   FunnelStage,
-  DealStageHistory,
   Activity,
   Campaign,
   CampaignFunnel,
@@ -66,4 +65,5 @@ export const TENANT_ENTITIES = [
   EmpresaCliente,
   EmpresaContacto,
   EduPayment,
+  AuditLog,
 ];

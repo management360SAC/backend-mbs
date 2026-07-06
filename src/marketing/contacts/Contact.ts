@@ -14,7 +14,7 @@ export type LeadStatus =
   | "won"
   | "lost";
 
-@Entity({ name: "mk_contacts" })
+@Entity({ name: "contacts" })
 export class Contact {
   @PrimaryGeneratedColumn()
   id: number;

@@ -2,7 +2,8 @@ import { IsString, IsNumber, IsInt, IsOptional, IsDateString } from "class-valid
 
 export class CreateDealDto {
   @IsInt()
-  contactId: number;
+  @IsOptional()
+  contactId?: number;
 
   @IsInt()
   @IsOptional()
@@ -12,10 +13,12 @@ export class CreateDealDto {
   title: string;
 
   @IsInt()
-  stageId: number;
+  @IsOptional()
+  stageId?: number;
 
   @IsNumber()
-  amount: number;
+  @IsOptional()
+  amount?: number;
 
   @IsString()
   @IsOptional()

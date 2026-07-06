@@ -8,7 +8,7 @@ import {
 } from "typeorm";
 import { Contact } from "../../contacts/Contact";
 
-@Entity({ name: "mk_consents" })
+@Entity({ name: "consents" })
 export class Consent {
   @PrimaryGeneratedColumn()
   id: number;

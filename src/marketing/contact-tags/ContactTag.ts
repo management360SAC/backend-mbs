@@ -9,7 +9,7 @@ import {
 import { Contact } from "../contacts/Contact";
 import { Tag } from "../tags/Tag";
 
-@Entity({ name: "mk_contact_tags" })
+@Entity({ name: "contact_tags" })
 export class ContactTag {
   @PrimaryColumn({ name: "contact_id", type: "int" })
   contactId: number;

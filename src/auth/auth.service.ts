@@ -3,6 +3,7 @@ import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
 import { PrismaService } from "../prisma/prisma.service";
 import { TenantDataSourceService } from "../tenant/tenant-datasource.service";
+import { AuditService } from "../audit/audit.service";
 import { User } from "../users/user.entity";
 import { UserRole } from "../users/user-role.entity";
 
@@ -12,9 +13,10 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
     private readonly tds: TenantDataSourceService,
+    private readonly audit: AuditService,
   ) {}
 
-  async login(email: string, password: string, tenantSlug: string) {
+  async login(email: string, password: string, tenantSlug: string, ip?: string, userAgent?: string) {
     // 1. Resolve tenant from master DB
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: tenantSlug, isActive: true },
@@ -41,11 +43,15 @@ export class AuthService {
     });
 
     if (!user || !user.isActive) {
+      await this.audit.log({ tenantSlug, userEmail: email, ip, userAgent, action: "LOGIN_FAILED", module: "auth", result: "failure", metadata: { reason: "user_not_found_or_inactive" } });
       throw new UnauthorizedException("Credenciales inválidas");
     }
 
     const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) throw new UnauthorizedException("Credenciales inválidas");
+    if (!valid) {
+      await this.audit.log({ tenantSlug, userId: user.id, userEmail: email, ip, userAgent, action: "LOGIN_FAILED", module: "auth", result: "failure", metadata: { reason: "wrong_password" } });
+      throw new UnauthorizedException("Credenciales inválidas");
+    }
 
     // 3. Build roles list
     const roles = (user.userRoles ?? []).map((ur: UserRole) => ur.role?.code).filter(Boolean);
@@ -65,6 +71,8 @@ export class AuthService {
     // 5. Update last login
     await userRepo.update(user.id, { lastLoginAt: new Date() } as any);
 
+    await this.audit.log({ tenantSlug, userId: user.id, userEmail: user.email, ip, userAgent, action: "LOGIN_SUCCESS", module: "auth", result: "success" });
+
     return {
       access_token: accessToken,
       user: {
@@ -75,6 +83,7 @@ export class AuthService {
         roles,
         tenantId: tenant.id,
         tenantSlug: tenant.slug,
+        tenantName: tenant.name,
       },
     };
   }

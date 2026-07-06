@@ -24,7 +24,7 @@ export class ActivityLogsService {
                 'created' AS action,
                 CONCAT('Contacto registrado: ', full_name) AS description,
                 NULL AS actor_name, created_at
-         FROM mk_contacts`,
+         FROM contacts`,
       );
     }
 
@@ -35,7 +35,7 @@ export class ActivityLogsService {
                 'payment_received' AS action,
                 CONCAT('Pago recibido: ', currency, ' ', FORMAT(amount,2), ' (', payment_method, ')') AS description,
                 NULL AS actor_name, created_at
-         FROM edu_payments`,
+         FROM payments`,
       );
     }
 
@@ -57,7 +57,7 @@ export class ActivityLogsService {
                 'enrolled' AS action,
                 CONCAT('Alumno matriculado en curso #', e.course_id, ' — ', e.status) AS description,
                 NULL AS actor_name, e.created_at
-         FROM edu_enrollments e`,
+         FROM enrollments e`,
       );
     }
 

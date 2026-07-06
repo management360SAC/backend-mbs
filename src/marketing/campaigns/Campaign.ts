@@ -14,7 +14,7 @@ export type CampaignType = (typeof CAMPAIGN_TYPES)[number];
 export const CAMPAIGN_STATUSES = ["draft", "active", "paused", "completed", "inactive"] as const;
 export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
 
-@Entity({ name: "mk_campaigns" })
+@Entity({ name: "campaigns" })
 export class Campaign {
   @PrimaryGeneratedColumn()
   id: number;

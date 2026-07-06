@@ -13,7 +13,7 @@ import { LeadSource } from "../../marketing/lead-sources/LeadSource";
 import { Seller } from "../../marketing/sellers/Seller";
 import { LeadStage } from "../../marketing/lead-stages/LeadStages";
 
-@Entity({ name: "mk_leads" })
+@Entity({ name: "leads" })
 export class Lead {
   @PrimaryGeneratedColumn()
   id: number;
@@ -40,7 +40,6 @@ export class Lead {
   originCompany?: string | null;
 
   @Column({ name: "fb_leadgen_id", type: "varchar", length: 50, nullable: true, unique: true })
-  @Index()
   fbLeadgenId?: string | null;
 
   @Column({ name: "expected_value", type: "numeric", precision: 12, scale: 2, nullable: true })

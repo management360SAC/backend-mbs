@@ -1,4 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
+import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
 import { ConfigModule } from "@nestjs/config";
 import { AuthModule } from "./auth/auth.module";
 import { UsersModule } from "./users/users.module";
@@ -18,10 +20,16 @@ import { PrismaModule } from "./prisma/prisma.module";
 import { TenantModule } from "./tenant/tenant.module";
 import { TenantMiddleware } from "./tenant/tenant.middleware";
 import { AdminModule } from "./admin/admin.module";
+import { AuditModule } from "./audit/audit.module";
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRoot([
+      { name: "short",  ttl: 1000,  limit: 20  },
+      { name: "medium", ttl: 10000, limit: 100 },
+      { name: "long",   ttl: 60000, limit: 300 },
+    ]),
     PrismaModule,
     TenantModule,
     AuthModule,
@@ -39,6 +47,10 @@ import { AdminModule } from "./admin/admin.module";
     FacebookLeadsModule,
     WebFormModule,
     AdminModule,
+    AuditModule,
+  ],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule implements NestModule {

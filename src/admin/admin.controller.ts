@@ -1,13 +1,17 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { TenantProvisioningService } from "./tenant-provisioning.service";
 import { CreateTenantDto } from "./dto/create-tenant.dto";
 import { CreateUserDto } from "../users/dto/users.dto";
 import { UpdateEmpresaConfigDto } from "../empresa-config/dto/update-empresa-config.dto";
+import { AuditService } from "../audit/audit.service";
 
 @Controller("admin")
 export class AdminController {
-  constructor(private readonly service: TenantProvisioningService) {}
+  constructor(
+    private readonly service: TenantProvisioningService,
+    private readonly audit: AuditService,
+  ) {}
 
   @Get("tenants/public")
   listTenantsPublic() {
@@ -54,5 +58,40 @@ export class AdminController {
   @Post("tenants/:slug/sync-roles")
   syncRolesToChildren(@Param("slug") slug: string) {
     return this.service.syncRolesToChildren(slug);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get("audit-logs")
+  getAuditLogs(
+    @Request() req: any,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+    @Query("action") action?: string,
+  ) {
+    return this.audit.list(req.user.tenantSlug, {
+      page: page ? Number(page) : 1,
+      limit: limit ? Number(limit) : 50,
+      action,
+    });
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get("leads")
+  getAllLeads(
+    @Request() req: any,
+    @Query("q") q?: string,
+    @Query("status") status?: string,
+    @Query("source_id") sourceId?: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.service.getAllTenantsLeads({
+      tenantSlug: req.user.tenantSlug,
+      q,
+      status,
+      sourceId: sourceId ? Number(sourceId) : undefined,
+      page: page ? Number(page) : 1,
+      limit: limit ? Number(limit) : 10,
+    });
   }
 }

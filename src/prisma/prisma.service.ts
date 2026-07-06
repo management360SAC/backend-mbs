@@ -132,8 +132,11 @@ export class PrismaService
       this.logger.log("Tenant inicial 'Management 360' creado");
     }
 
-    // Siempre verificar que el schema y usuario admin existan
-    await this.setupTenantDatabase(dbHost, dbPort, dbUser, dbPass, dbName);
+    // Siempre verificar que el schema y usuario admin existan para TODOS los tenants
+    const allTenants = await this.tenant.findMany({ where: { isActive: true } });
+    for (const t of allTenants) {
+      await this.setupTenantDatabase(t.dbHost, t.dbPort, t.dbUser, t.dbPass, t.dbName);
+    }
   }
 
   private parseAdminUrl() {

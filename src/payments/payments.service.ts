@@ -8,12 +8,15 @@ import { UpdatePaymentDto } from "./dto/update-payment.dto";
 export class PaymentsService {
   constructor(private readonly tds: TenantDataSourceService) {}
 
-  async findAll(params?: { contact_id?: number; course_id?: number }) {
+  async findAll(params?: { contact_id?: number; course_id?: number; page?: number; limit?: number }) {
     const repo = await this.tds.getRepository(EduPayment);
+    const page = params?.page ?? 1;
+    const limit = params?.limit ?? 10;
+
     const qb = repo
       .createQueryBuilder("p")
-      .leftJoin("mk_contacts", "c", "c.id = p.contact_id")
-      .leftJoin("edu_courses", "ec", "ec.id = p.course_id")
+      .leftJoin("contacts", "c", "c.id = p.contact_id")
+      .leftJoin("courses", "ec", "ec.id = p.course_id")
       .addSelect("c.full_name", "contact_name")
       .addSelect("ec.name", "course_name")
       .orderBy("p.createdAt", "DESC");
@@ -21,8 +24,11 @@ export class PaymentsService {
     if (params?.contact_id) qb.andWhere("p.contactId = :cid", { cid: params.contact_id });
     if (params?.course_id) qb.andWhere("p.courseId = :crid", { crid: params.course_id });
 
+    const total = await qb.getCount();
+    qb.skip((page - 1) * limit).take(limit);
     const raw = await qb.getRawMany();
-    return raw.map((r) => this.serializeRaw(r));
+    const items = raw.map((r) => this.serializeRaw(r));
+    return { items, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
   async findOne(id: number) {

@@ -1,6 +1,6 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from "typeorm";
 
-@Entity({ name: "mk_funnel_stages" })
+@Entity({ name: "funnel_stages" })
 export class FunnelStage {
   @PrimaryGeneratedColumn()
   id: number;
