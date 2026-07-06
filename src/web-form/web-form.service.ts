@@ -52,11 +52,10 @@ export class WebFormService {
       full_name: dto.nombre,
       email: dto.correo ?? null,
       phone: dto.telefono ?? null,
-      notes: dto.mensaje ?? null,
       type: "lead",
       status: "new",
       source_id: source.id,
-    });
+    } as any);
 
     await repo.save(contact);
     this.logger.log(`[${tenantSlug}] Contacto web creado: ${dto.nombre} (${dto.correo})`);
