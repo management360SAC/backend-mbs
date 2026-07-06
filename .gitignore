@@ -3,7 +3,7 @@ node_modules
 
 /generated/prisma
 
-dist
+# dist is intentionally tracked to support Coolify rolling deployments
 .git
 .gitignore
 Dockerfile
