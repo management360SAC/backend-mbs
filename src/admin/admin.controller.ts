@@ -98,7 +98,7 @@ export class AdminController {
   }
 
   @Post("db-reset")
-  async dbReset(@Headers("x-reset-token") token: string) {
+  async runDbReset(@Headers("x-reset-token") token: string) {
     const expected = process.env.TOKEN_META;
     if (!expected || token !== expected) throw new ForbiddenException("Token inválido");
     return this.dbReset.runReset();
