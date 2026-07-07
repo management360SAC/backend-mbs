@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Brackets } from "typeorm";
 import { TenantDataSourceService } from "../../tenant/tenant-datasource.service";
+import { TenantContext, TenantInfo } from "../../tenant/tenant.context";
+import { PrismaService } from "../../prisma/prisma.service";
 import { Lead } from "./Lead";
 import { CreateLeadDto } from "./dto/create-lead.dto";
 import { UpdateLeadDto } from "./dto/update-lead.dto";
@@ -17,22 +19,91 @@ interface ListParams {
   stageId?: number;
 }
 
+interface TenantRow {
+  id: number;
+  slug: string;
+  db_name: string;
+  db_host: string;
+  db_port: number;
+  db_user: string;
+  db_pass: string;
+}
+
 @Injectable()
 export class LeadsService {
-  constructor(private readonly tds: TenantDataSourceService) {}
+  constructor(
+    private readonly tds: TenantDataSourceService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   async list(params: ListParams) {
     const { q, page = 1, pageSize = 20, sourceId, sellerId, stageId } = params;
-    const repo = await this.tds.getRepository(Lead);
+
+    const currentTenant = TenantContext.getOrFail();
+
+    // Get child tenants from master DB
+    const children = await this.prisma.$queryRaw<TenantRow[]>`
+      SELECT id, slug, db_name, db_host, db_port, db_user, db_pass
+      FROM tenants
+      WHERE parent_id = ${currentTenant.id} AND is_active = 1
+    `;
+
+    // Fetch leads from current tenant
+    const ownLeads = await this.fetchLeads(currentTenant, { q, sourceId, sellerId, stageId });
+
+    if (children.length === 0) {
+      const total = ownLeads.length;
+      const start = (page - 1) * pageSize;
+      return {
+        items: ownLeads.slice(start, start + pageSize),
+        meta: { total, page, pageSize, totalPages: Math.ceil(total / pageSize) },
+      };
+    }
+
+    // Fetch leads from each child tenant and tag with tenantSlug
+    const childLeadsArrays = await Promise.all(
+      children.map((child) => {
+        const info: TenantInfo = {
+          id: child.id,
+          slug: child.slug,
+          dbName: child.db_name,
+          dbHost: child.db_host,
+          dbPort: child.db_port,
+          dbUser: child.db_user,
+          dbPass: child.db_pass,
+        };
+        return TenantContext.run(info, () =>
+          this.fetchLeads(info, { q, sourceId, sellerId, stageId }),
+        );
+      }),
+    );
+
+    // Merge, sort by createdAt DESC, paginate
+    const allLeads = [...ownLeads, ...childLeadsArrays.flat()].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+
+    const total = allLeads.length;
+    const start = (page - 1) * pageSize;
+    return {
+      items: allLeads.slice(start, start + pageSize),
+      meta: { total, page, pageSize, totalPages: Math.ceil(total / pageSize) },
+    };
+  }
+
+  private async fetchLeads(
+    tenant: TenantInfo,
+    filters: { q?: string; sourceId?: number; sellerId?: number; stageId?: number },
+  ): Promise<Lead[]> {
+    const { q, sourceId, sellerId, stageId } = filters;
+    const repo = await this.tds.getRepository(Lead, tenant);
 
     const qb = repo
       .createQueryBuilder("lead")
       .leftJoinAndSelect("lead.source", "source")
       .leftJoinAndSelect("lead.seller", "seller")
       .leftJoinAndSelect("lead.currentStage", "stage")
-      .orderBy("lead.createdAt", "DESC")
-      .skip((page - 1) * pageSize)
-      .take(pageSize);
+      .orderBy("lead.createdAt", "DESC");
 
     if (q) {
       qb.andWhere(
@@ -48,12 +119,7 @@ export class LeadsService {
     if (sellerId) qb.andWhere("seller.id = :sellerId", { sellerId });
     if (stageId) qb.andWhere("stage.id = :stageId", { stageId });
 
-    const [items, total] = await qb.getManyAndCount();
-
-    return {
-      items,
-      meta: { total, page, pageSize, totalPages: Math.ceil(total / pageSize) },
-    };
+    return qb.getMany();
   }
 
   async get(id: number) {

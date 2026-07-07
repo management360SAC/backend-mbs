@@ -13,25 +13,64 @@ exports.LeadsService = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("typeorm");
 const tenant_datasource_service_1 = require("../../tenant/tenant-datasource.service");
+const tenant_context_1 = require("../../tenant/tenant.context");
+const prisma_service_1 = require("../../prisma/prisma.service");
 const Lead_1 = require("./Lead");
 const LeadStages_1 = require("../../marketing/lead-stages/LeadStages");
 const Seller_1 = require("../sellers/Seller");
 let LeadsService = class LeadsService {
     tds;
-    constructor(tds) {
+    prisma;
+    constructor(tds, prisma) {
         this.tds = tds;
+        this.prisma = prisma;
     }
     async list(params) {
         const { q, page = 1, pageSize = 20, sourceId, sellerId, stageId } = params;
-        const repo = await this.tds.getRepository(Lead_1.Lead);
+        const currentTenant = tenant_context_1.TenantContext.getOrFail();
+        const children = await this.prisma.$queryRaw `
+      SELECT id, slug, db_name, db_host, db_port, db_user, db_pass
+      FROM tenants
+      WHERE parent_id = ${currentTenant.id} AND is_active = 1
+    `;
+        const ownLeads = await this.fetchLeads(currentTenant, { q, sourceId, sellerId, stageId });
+        if (children.length === 0) {
+            const total = ownLeads.length;
+            const start = (page - 1) * pageSize;
+            return {
+                items: ownLeads.slice(start, start + pageSize),
+                meta: { total, page, pageSize, totalPages: Math.ceil(total / pageSize) },
+            };
+        }
+        const childLeadsArrays = await Promise.all(children.map((child) => {
+            const info = {
+                id: child.id,
+                slug: child.slug,
+                dbName: child.db_name,
+                dbHost: child.db_host,
+                dbPort: child.db_port,
+                dbUser: child.db_user,
+                dbPass: child.db_pass,
+            };
+            return tenant_context_1.TenantContext.run(info, () => this.fetchLeads(info, { q, sourceId, sellerId, stageId }));
+        }));
+        const allLeads = [...ownLeads, ...childLeadsArrays.flat()].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const total = allLeads.length;
+        const start = (page - 1) * pageSize;
+        return {
+            items: allLeads.slice(start, start + pageSize),
+            meta: { total, page, pageSize, totalPages: Math.ceil(total / pageSize) },
+        };
+    }
+    async fetchLeads(tenant, filters) {
+        const { q, sourceId, sellerId, stageId } = filters;
+        const repo = await this.tds.getRepository(Lead_1.Lead, tenant);
         const qb = repo
             .createQueryBuilder("lead")
             .leftJoinAndSelect("lead.source", "source")
             .leftJoinAndSelect("lead.seller", "seller")
             .leftJoinAndSelect("lead.currentStage", "stage")
-            .orderBy("lead.createdAt", "DESC")
-            .skip((page - 1) * pageSize)
-            .take(pageSize);
+            .orderBy("lead.createdAt", "DESC");
         if (q) {
             qb.andWhere(new typeorm_1.Brackets((w) => {
                 w.where("lead.fullName LIKE :q", { q: `%${q}%` })
@@ -45,11 +84,7 @@ let LeadsService = class LeadsService {
             qb.andWhere("seller.id = :sellerId", { sellerId });
         if (stageId)
             qb.andWhere("stage.id = :stageId", { stageId });
-        const [items, total] = await qb.getManyAndCount();
-        return {
-            items,
-            meta: { total, page, pageSize, totalPages: Math.ceil(total / pageSize) },
-        };
+        return qb.getMany();
     }
     async get(id) {
         const repo = await this.tds.getRepository(Lead_1.Lead);
@@ -119,6 +154,7 @@ let LeadsService = class LeadsService {
 exports.LeadsService = LeadsService;
 exports.LeadsService = LeadsService = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [tenant_datasource_service_1.TenantDataSourceService])
+    __metadata("design:paramtypes", [tenant_datasource_service_1.TenantDataSourceService,
+        prisma_service_1.PrismaService])
 ], LeadsService);
 //# sourceMappingURL=leads.service.js.map

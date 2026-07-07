@@ -1,4 +1,5 @@
 import { TenantDataSourceService } from "../../tenant/tenant-datasource.service";
+import { PrismaService } from "../../prisma/prisma.service";
 import { Lead } from "./Lead";
 import { CreateLeadDto } from "./dto/create-lead.dto";
 import { UpdateLeadDto } from "./dto/update-lead.dto";
@@ -12,7 +13,8 @@ interface ListParams {
 }
 export declare class LeadsService {
     private readonly tds;
-    constructor(tds: TenantDataSourceService);
+    private readonly prisma;
+    constructor(tds: TenantDataSourceService, prisma: PrismaService);
     list(params: ListParams): Promise<{
         items: Lead[];
         meta: {
@@ -22,6 +24,7 @@ export declare class LeadsService {
             totalPages: number;
         };
     }>;
+    private fetchLeads;
     get(id: number): Promise<Lead>;
     create(dto: CreateLeadDto): Promise<Lead[]>;
     update(id: number, dto: UpdateLeadDto): Promise<Lead>;
