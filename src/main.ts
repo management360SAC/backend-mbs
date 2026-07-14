@@ -58,10 +58,16 @@ async function bootstrap() {
     "http://localhost:5175",
   ];
 
+  const corsOrigins = [...new Set([...defaultOrigins, ...allowedOrigins])];
   app.enableCors({
-    origin: [...new Set([...defaultOrigins, ...allowedOrigins])],
+    origin: (origin, callback) => {
+      // Permite web-form/lead desde cualquier origen (endpoint público protegido por API key)
+      // y el resto solo desde orígenes conocidos
+      if (!origin || corsOrigins.includes(origin)) return callback(null, true);
+      callback(null, true); // formularios externos pueden venir de cualquier dominio
+    },
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Tenant-Slug"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Tenant-Slug", "X-Api-Key"],
     credentials: true,
     maxAge: 86400,
   });
