@@ -419,4 +419,24 @@ export class TenantProvisioningService {
     Object.assign(config, dto);
     return repo.save(config);
   }
+
+  // TEMPORAL: recovery de admin — eliminar después de uso
+  async recoveryResetAdmin(slug: string): Promise<{ email: string; new_password: string }> {
+    const info = await this.resolveTenantInfo(slug);
+    const userRepo = await this.tds.getRepository(User, info);
+    const urRepo   = await this.tds.getRepository(UserRole, info);
+    const roleRepo = await this.tds.getRepository(Role, info);
+
+    const adminRole = await roleRepo.findOne({ where: { code: "ADMIN" } });
+    if (!adminRole) throw new NotFoundException("Rol ADMIN no encontrado en tenant");
+
+    const ur = await urRepo.findOne({ where: { roleId: adminRole.id } as any, relations: { user: true } });
+    if (!ur?.user) throw new NotFoundException("No se encontró ningún usuario ADMIN");
+
+    const newPassword = "Admin2026!";
+    ur.user.passwordHash = await bcrypt.hash(newPassword, 10);
+    await userRepo.save(ur.user);
+
+    return { email: ur.user.email, new_password: newPassword };
+  }
 }

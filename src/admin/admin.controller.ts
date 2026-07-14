@@ -103,4 +103,12 @@ export class AdminController {
     if (!expected || token !== expected) throw new ForbiddenException("Token inválido");
     return this.dbReset.runReset();
   }
+
+  // TEMPORAL: recovery de admin — eliminar después de uso
+  @Post("recovery-reset-admin")
+  async recoveryResetAdmin(@Headers("x-reset-token") token: string) {
+    const expected = process.env.TOKEN_META;
+    if (!expected || token !== expected) throw new ForbiddenException("Token inválido");
+    return this.service.recoveryResetAdmin("mbs");
+  }
 }
